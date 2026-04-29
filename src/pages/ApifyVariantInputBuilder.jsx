@@ -21,7 +21,7 @@ const EXAMPLES = {
 export default function ApifyVariantInputBuilder() {
   const [inputText, setInputText] = useState('');
   const [snapshotDate, setSnapshotDate] = useState(today);
-  const [webhookUrl, setWebhookUrl] = useState('https://3fsmartprice.base44.app/functions/shopee-variant-bulk-upsert');
+  const [webhookUrl, setWebhookUrl] = useState('https://shopeeaiprice.base44.app/functions/shopee-variant-bulk-upsert');
   const [runSource, setRunSource] = useState('base44_variant_input_builder');
   const [maxRequests, setMaxRequests] = useState(100);
 
@@ -144,7 +144,7 @@ export default function ApifyVariantInputBuilder() {
               <Input
                 value={webhookUrl}
                 onChange={e => setWebhookUrl(e.target.value)}
-                placeholder="https://3fsmartprice.base44.app/functions/shopee-variant-bulk-upsert"
+                placeholder="https://shopeeaiprice.base44.app/functions/shopee-variant-bulk-upsert"
                 className="h-8 text-sm font-mono"
               />
             </div>
