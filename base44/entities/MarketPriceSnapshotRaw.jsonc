@@ -1,0 +1,60 @@
+{
+  "name": "MarketPriceSnapshotRaw",
+  "type": "object",
+  "properties": {
+    "source_type": {
+      "type": "string"
+    },
+    "snapshot_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "sku": {
+      "type": "string"
+    },
+    "keyword": {
+      "type": "string"
+    },
+    "competitor_shop_name": {
+      "type": "string"
+    },
+    "competitor_product_name": {
+      "type": "string"
+    },
+    "competitor_product_url": {
+      "type": "string"
+    },
+    "competitor_price": {
+      "type": "number"
+    },
+    "competitor_original_price": {
+      "type": "number"
+    },
+    "estimated_units_sold": {
+      "type": "number"
+    },
+    "estimated_revenue": {
+      "type": "number"
+    },
+    "rank_position": {
+      "type": "number"
+    },
+    "rating_value": {
+      "type": "number"
+    },
+    "rating_count": {
+      "type": "number"
+    },
+    "review_count": {
+      "type": "number"
+    },
+    "raw_json": {
+      "type": "string"
+    },
+    "synced_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": []
+}

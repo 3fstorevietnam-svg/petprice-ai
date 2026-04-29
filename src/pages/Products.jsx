@@ -155,7 +155,7 @@ export default function Products() {
         <table className="w-full text-xs min-w-[1400px]">
           <thead className="sticky top-0 z-10">
             <tr className="border-b border-border bg-muted/80 backdrop-blur">
-              {['SKU', 'Name', 'Category', 'Cost', 'Price', 'Profit', 'Margin', 'Sugg. Price', 'Role', 'Combo Qty', 'Min', 'Max', 'Status', 'Notes', '⚠'].map(h => (
+              {['SKU', 'Name', 'Category', 'Cost', 'Price', 'Profit', 'Margin', 'Mkt Avg', 'Comp. Price', 'Rank', 'Vs Market', 'Sugg. Price', 'Role', 'Combo Qty', 'Status', '⚠'].map(h => (
                 <th key={h} className="text-left px-3 py-2.5 font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap text-[10px]">{h}</th>
               ))}
             </tr>
@@ -163,10 +163,10 @@ export default function Products() {
           <tbody className="divide-y divide-border">
             {loading ? Array(6).fill(0).map((_, i) => (
               <tr key={i}>
-                {Array(15).fill(0).map((_, j) => <td key={j} className="px-3 py-3"><div className="h-3 bg-muted rounded animate-pulse" /></td>)}
+                {Array(16).fill(0).map((_, j) => <td key={j} className="px-3 py-3"><div className="h-3 bg-muted rounded animate-pulse" /></td>)}
               </tr>
             )) : filtered.length === 0 ? (
-              <tr><td colSpan={15} className="py-16 text-center text-muted-foreground">
+              <tr><td colSpan={16} className="py-16 text-center text-muted-foreground">
                 <Package className="w-8 h-8 mx-auto mb-2 opacity-20" />No products found.
               </td></tr>
             ) : filtered.map(p => {
@@ -199,6 +199,30 @@ export default function Products() {
                       </span>
                     ) : '—'}
                   </td>
+                  {/* Market Intelligence Columns */}
+                  <td className="px-3 py-2.5 font-mono text-muted-foreground">
+                    {p.market_avg ? `₫${parseFloat(p.market_avg).toLocaleString()}` : <span className="text-[10px] italic opacity-40">no data</span>}
+                  </td>
+                  <td className="px-3 py-2.5 font-mono">
+                    {p.competitor_price ? <span className="font-semibold">₫{parseFloat(p.competitor_price).toLocaleString()}</span> : <span className="text-[10px] italic opacity-40">—</span>}
+                  </td>
+                  <td className="px-3 py-2.5 text-center">
+                    {p.current_rank ? (
+                      <span className={cn('font-bold text-xs', p.current_rank <= 10 ? 'text-emerald-600' : p.current_rank <= 20 ? 'text-yellow-600' : 'text-muted-foreground')}>
+                        #{p.current_rank}
+                      </span>
+                    ) : <span className="opacity-30 text-[10px]">—</span>}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    {p.market_avg && p.current_price ? (() => {
+                      const price = parseFloat(p.current_price);
+                      const avg = parseFloat(p.market_avg);
+                      const diff = ((price - avg) / avg * 100);
+                      if (diff > 3) return <span className="text-[10px] font-semibold bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">↑ Above</span>;
+                      if (diff < -3) return <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">↓ Below</span>;
+                      return <span className="text-[10px] font-semibold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">~ Near</span>;
+                    })() : <span className="opacity-30 text-[10px]">—</span>}
+                  </td>
                   <td className="px-3 py-2.5">
                     {sugg?.suggested_price ? (
                       <span className={cn('font-mono font-semibold', sugg.suggested_action === 'TANG_GIA' ? 'text-emerald-600' : sugg.suggested_action === 'GIAM_GIA' ? 'text-orange-600' : 'text-muted-foreground')}>
@@ -215,18 +239,9 @@ export default function Products() {
                     <InlineEdit value={p.combo_qty} type="number" onSave={v => inlineUpdate(p.id, 'combo_qty', v)} />
                   </td>
                   <td className="px-3 py-2.5">
-                    <InlineEdit value={p.min_price} type="number" onSave={v => inlineUpdate(p.id, 'min_price', v)} className="font-mono" />
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <InlineEdit value={p.max_price} type="number" onSave={v => inlineUpdate(p.id, 'max_price', v)} className="font-mono" />
-                  </td>
-                  <td className="px-3 py-2.5">
                     <InlineSelect value={p.status} options={[{ value: 'active', label: 'Active' }, { value: 'paused', label: 'Paused' }, { value: 'killed', label: 'Killed' }]}
                       onSave={v => inlineUpdate(p.id, 'status', v)}
                       renderValue={v => v ? <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded-full', STATUS_COLORS[v])}>{v}</span> : '—'} />
-                  </td>
-                  <td className="px-3 py-2.5 max-w-[120px]">
-                    <InlineEdit value={p.notes} onSave={v => inlineUpdate(p.id, 'notes', v)} className="text-muted-foreground truncate max-w-[110px] block" />
                   </td>
                   <td className="px-3 py-2.5 text-center">
                     {isLosing && <AlertTriangle className="w-3.5 h-3.5 text-red-500 mx-auto" />}

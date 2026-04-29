@@ -68,6 +68,31 @@
     },
     "notes": {
       "type": "string"
+    },
+    "market_low": {
+      "type": "number"
+    },
+    "market_avg": {
+      "type": "number"
+    },
+    "market_high": {
+      "type": "number"
+    },
+    "competitor_price": {
+      "type": "number"
+    },
+    "competitor_count": {
+      "type": "number"
+    },
+    "current_rank": {
+      "type": "number"
+    },
+    "last_market_sync_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_market_source": {
+      "type": "string"
     }
   },
   "required": [

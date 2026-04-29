@@ -1,0 +1,48 @@
+{
+  "name": "MarketConnection",
+  "type": "object",
+  "properties": {
+    "connection_name": {
+      "type": "string",
+      "description": "Display name for this connection"
+    },
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "metric_api",
+        "metric_csv",
+        "apify",
+        "manual_import"
+      ]
+    },
+    "base_url": {
+      "type": "string"
+    },
+    "api_key": {
+      "type": "string"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "last_sync_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "connected",
+        "error"
+      ],
+      "default": "pending"
+    },
+    "last_error": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "connection_name"
+  ]
+}

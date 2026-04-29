@@ -1,0 +1,31 @@
+{
+  "name": "CompetitorWatchlist",
+  "type": "object",
+  "properties": {
+    "sku": {
+      "type": "string"
+    },
+    "keyword": {
+      "type": "string"
+    },
+    "tracked_shop_name": {
+      "type": "string"
+    },
+    "tracked_product_url": {
+      "type": "string"
+    },
+    "tracked_product_name": {
+      "type": "string"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "sku"
+  ]
+}

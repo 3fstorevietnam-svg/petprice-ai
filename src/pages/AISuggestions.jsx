@@ -87,6 +87,7 @@ function ReasonExpand({ text }) {
 
 export default function AISuggestions() {
   const [suggestions, setSuggestions] = useState([]);
+  const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [activeFilter, setActiveFilter] = useState('all');
@@ -98,7 +99,10 @@ export default function AISuggestions() {
 
   const load = () => {
     setLoading(true);
-    base44.entities.AISuggestion.list('-rec_date', 300).then(d => { setSuggestions(d); setLoading(false); });
+    Promise.all([
+      base44.entities.AISuggestion.list('-rec_date', 300),
+      base44.entities.Product.list('-created_date', 300),
+    ]).then(([s, p]) => { setSuggestions(s); setProducts(p); setLoading(false); });
   };
 
   useEffect(() => { load(); }, []);
@@ -184,22 +188,23 @@ export default function AISuggestions() {
         <table className="w-full text-xs min-w-[1300px]">
           <thead className="sticky top-0 z-10">
             <tr className="border-b border-border bg-muted/80 backdrop-blur">
-              {['SKU', 'Ngày', 'Giá hiện tại', 'Lợi nhuận', 'Margin', 'Hành động', 'Giá đề xuất', 'Combo Qty', 'Ads', 'Confidence', 'Lý do', 'Trạng thái', ''].map(h => (
+              {['SKU', 'Ngày', 'Giá hiện tại', 'Lợi nhuận', 'Margin', 'Mkt Avg', 'Comp. Price', 'Rank', 'Hành động', 'Giá đề xuất', 'Combo Qty', 'Ads', 'Confidence', 'Lý do', 'Trạng thái', ''].map(h => (
                 <th key={h} className="text-left px-3 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {loading ? Array(5).fill(0).map((_, i) => (
-              <tr key={i}>{Array(13).fill(0).map((_, j) => <td key={j} className="px-3 py-3"><div className="h-3 bg-muted rounded animate-pulse" /></td>)}</tr>
+              <tr key={i}>{Array(16).fill(0).map((_, j) => <td key={j} className="px-3 py-3"><div className="h-3 bg-muted rounded animate-pulse" /></td>)}</tr>
             )) : filtered.length === 0 ? (
-              <tr><td colSpan={13} className="py-16 text-center text-muted-foreground">
+              <tr><td colSpan={16} className="py-16 text-center text-muted-foreground">
                 <Brain className="w-8 h-8 mx-auto mb-2 opacity-20" />Không có dữ liệu. Nhấn "Chạy AI" để tạo gợi ý.
               </td></tr>
             ) : filtered.map(s => {
               const isLosing = (s.current_profit !== null && s.current_profit !== undefined && s.current_profit < 0) || (s.current_margin !== null && s.current_margin !== undefined && s.current_margin < 0);
               const actionStyle = ACTION_STYLES[s.suggested_action] || {};
               const adsStyle = ADS_STYLES[s.ads_action] || {};
+              const prod = products.find(p => p.sku === s.sku);
               return (
                 <tr key={s.id} className={cn('hover:bg-muted/20 transition-colors', isLosing && 'bg-red-50 hover:bg-red-50/70', s.suggested_action === 'GOM_COMBO' && !isLosing && 'bg-purple-50/40', s.suggested_action === 'KILL_SKU' && !isLosing && 'bg-gray-50')}>
                   <td className="px-3 py-2.5"><span className="font-mono font-semibold">{s.sku}</span></td>
@@ -218,6 +223,18 @@ export default function AISuggestions() {
                         {parseFloat(s.current_margin).toFixed(1)}%
                       </span>
                     ) : '—'}
+                  </td>
+                  {/* Market Intelligence */}
+                  <td className="px-3 py-2.5 font-mono text-muted-foreground text-xs">
+                    {prod?.market_avg ? `₫${parseFloat(prod.market_avg).toLocaleString()}` : <span className="opacity-30">—</span>}
+                  </td>
+                  <td className="px-3 py-2.5 font-mono text-xs">
+                    {prod?.competitor_price ? <span className="font-semibold">₫{parseFloat(prod.competitor_price).toLocaleString()}</span> : <span className="opacity-30">—</span>}
+                  </td>
+                  <td className="px-3 py-2.5 text-center text-xs">
+                    {prod?.current_rank ? (
+                      <span className={cn('font-bold', prod.current_rank <= 10 ? 'text-emerald-600' : prod.current_rank <= 20 ? 'text-yellow-600' : 'text-muted-foreground')}>#{prod.current_rank}</span>
+                    ) : <span className="opacity-30">—</span>}
                   </td>
                   <td className="px-3 py-2.5">
                     {s.suggested_action ? <span className={cn('text-[10px] font-bold px-2 py-1 rounded-md border', actionStyle.cls)}>{actionStyle.label || s.suggested_action}</span> : '—'}

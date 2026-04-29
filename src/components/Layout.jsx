@@ -2,7 +2,7 @@ import { Outlet, NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Package, BarChart3, Brain,
   CheckSquare, Layers, Skull, TrendingUp, Settings,
-  TestTube, Zap
+  TestTube, Zap, Globe, Wifi
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -17,6 +17,8 @@ const navItems = [
   { to: '/performance', label: 'Performance', icon: TrendingUp },
   { to: '/price-test-log', label: 'Price Test Log', icon: TestTube },
   { to: '/settings', label: 'App Settings', icon: Settings },
+  { to: '/market-connection', label: 'Market Connection', icon: Wifi, section: 'market' },
+  { to: '/competitor-sync', label: 'Competitor Sync', icon: Globe, section: 'market' },
 ];
 
 export default function Layout() {
@@ -38,26 +40,35 @@ export default function Layout() {
 
         {/* Nav */}
         <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-          {navItems.map(({ to, label, icon: Icon, pulse, highlight }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === '/'}
-              className={({ isActive }) => cn(
-                'flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-150',
-                isActive
-                  ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                  : highlight
-                    ? 'text-orange-300 hover:bg-sidebar-accent/60 hover:text-orange-200'
-                    : 'text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground'
-              )}
-            >
-              <Icon className="w-3.5 h-3.5 flex-shrink-0" />
-              <span className="flex-1">{label}</span>
-              {highlight && <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />}
-              {pulse && !highlight && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
-            </NavLink>
-          ))}
+          {navItems.map(({ to, label, icon: Icon, pulse, highlight, section }, idx) => {
+            const isFirstMarket = section === 'market' && navItems[idx - 1]?.section !== 'market';
+            return (
+              <div key={to}>
+                {isFirstMarket && (
+                  <div className="pt-2 pb-1 px-3">
+                    <p className="text-[9px] font-bold text-sidebar-foreground/40 uppercase tracking-widest">Market Intel</p>
+                  </div>
+                )}
+                <NavLink
+                  to={to}
+                  end={to === '/'}
+                  className={({ isActive }) => cn(
+                    'flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-150',
+                    isActive
+                      ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                      : highlight
+                        ? 'text-orange-300 hover:bg-sidebar-accent/60 hover:text-orange-200'
+                        : 'text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground'
+                  )}
+                >
+                  <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="flex-1">{label}</span>
+                  {highlight && <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />}
+                  {pulse && !highlight && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+                </NavLink>
+              </div>
+            );
+          })}
         </nav>
 
         {/* Footer */}

@@ -1,0 +1,50 @@
+{
+  "name": "MarketSummaryDaily",
+  "type": "object",
+  "properties": {
+    "sku": {
+      "type": "string"
+    },
+    "summary_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "market_low": {
+      "type": "number"
+    },
+    "market_avg": {
+      "type": "number"
+    },
+    "market_high": {
+      "type": "number"
+    },
+    "competitor_price": {
+      "type": "number"
+    },
+    "competitor_count": {
+      "type": "number"
+    },
+    "estimated_market_units": {
+      "type": "number"
+    },
+    "estimated_market_revenue": {
+      "type": "number"
+    },
+    "current_rank": {
+      "type": "number"
+    },
+    "rank_bucket": {
+      "type": "string"
+    },
+    "source_type": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "sku",
+    "summary_date"
+  ]
+}

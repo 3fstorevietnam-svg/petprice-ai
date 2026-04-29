@@ -16,6 +16,8 @@ import KillList from '@/pages/KillList';
 import PerformanceTracking from '@/pages/PerformanceTracking';
 import PriceTestLog from '@/pages/PriceTestLog';
 import AppSettingsPage from '@/pages/AppSettingsPage';
+import MarketConnection from '@/pages/MarketConnection';
+import CompetitorSyncCenter from '@/pages/CompetitorSyncCenter';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -49,6 +51,8 @@ const AuthenticatedApp = () => {
         <Route path="/performance" element={<PerformanceTracking />} />
         <Route path="/price-test-log" element={<PriceTestLog />} />
         <Route path="/settings" element={<AppSettingsPage />} />
+        <Route path="/market-connection" element={<MarketConnection />} />
+        <Route path="/competitor-sync" element={<CompetitorSyncCenter />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
