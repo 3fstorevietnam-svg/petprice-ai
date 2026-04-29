@@ -5,9 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import FormDialog from '@/components/admin/FormDialog';
-import { Plus, Search, Package, AlertTriangle } from 'lucide-react';
+import { Plus, Search, Package, AlertTriangle, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import ImportProductsModal from '@/components/products/ImportProductsModal';
 
 const STATUS_COLORS = { active: 'bg-emerald-100 text-emerald-800', paused: 'bg-yellow-100 text-yellow-800', killed: 'bg-red-100 text-red-700' };
 const ROLE_COLORS = { moi: 'bg-purple-100 text-purple-800', core: 'bg-blue-100 text-blue-800', upsell: 'bg-orange-100 text-orange-800' };
@@ -87,6 +88,7 @@ export default function Products() {
   const [form, setForm] = useState(DEFAULTS);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -132,7 +134,12 @@ export default function Products() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <PageHeader title="Products" subtitle={`${products.length} SKUs`}
-        actions={<Button size="sm" onClick={openCreate}><Plus className="w-4 h-4 mr-1.5" />Add SKU</Button>} />
+        actions={
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}><Upload className="w-4 h-4 mr-1.5" />Import Products</Button>
+            <Button size="sm" onClick={openCreate}><Plus className="w-4 h-4 mr-1.5" />Add SKU</Button>
+          </div>
+        } />
 
       <div className="flex items-center gap-3 px-5 py-3 border-b border-border bg-card/30 flex-shrink-0">
         <div className="relative max-w-xs flex-1">
@@ -267,6 +274,8 @@ export default function Products() {
           </tbody>
         </table>
       </div>
+
+      <ImportProductsModal open={importOpen} onOpenChange={setImportOpen} onImportDone={load} />
 
       <FormDialog open={open} onOpenChange={setOpen} title="Product" fields={FIELDS} form={form}
         onChange={(k, v) => setForm(f => ({ ...f, [k]: v }))}
