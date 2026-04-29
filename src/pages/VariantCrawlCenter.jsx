@@ -5,8 +5,8 @@ import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import PageHeader from '@/components/PageHeader';
 import {
-  Play, RefreshCw, Webhook, Layers, Zap, Search,
-  Loader2, CheckCircle2, AlertCircle, Clock, Database, BarChart3
+  Play, RefreshCw, Layers, Zap, Search,
+  Loader2, CheckCircle2, AlertCircle, Clock, Database, BarChart3, FlaskConical
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -55,14 +55,39 @@ export default function VariantCrawlCenter() {
 
   useEffect(() => { load(); }, [load]);
 
-  const runFn = async (fnName, label) => {
+  const runFn = async (fnName, label, payload = {}) => {
     setBusy(fnName);
     try {
-      const res = await base44.functions.invoke(fnName, {});
+      const res = await base44.functions.invoke(fnName, payload);
       toast({ title: `${label} complete`, description: JSON.stringify(res.data || {}).slice(0, 200) });
       await load();
     } catch (e) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    }
+    setBusy(null);
+  };
+
+  const testWebhook = async () => {
+    setBusy('testWebhook');
+    try {
+      const res = await base44.functions.invoke('shopeeVariantBulkUpsert', {
+        items: [{
+          sku: 'TEST.001',
+          product_link: 'https://shopee.vn/product/123456/987654321',
+          parent_product_name: 'Test Product',
+          variant_name: 'Test Variant',
+          variant_price: 99000,
+          snapshot_date: new Date().toISOString().slice(0, 10),
+        }],
+      });
+      const d = res.data || {};
+      toast({
+        title: `Test Webhook — inserted: ${d.inserted ?? '?'}, failed: ${d.failed ?? '?'}`,
+        description: d.errors?.length ? d.errors[0] : 'OK',
+      });
+      await load();
+    } catch (e) {
+      toast({ title: 'Test failed', description: e.message, variant: 'destructive' });
     }
     setBusy(null);
   };
@@ -95,9 +120,9 @@ export default function VariantCrawlCenter() {
               {busy === 'queueVariantCrawl' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
               Queue Seeds
             </Button>
-            <Button size="sm" variant="outline" onClick={() => runFn('receiveVariantCrawlerWebhook', 'Webhook')} disabled={isBusy}>
-              {busy === 'receiveVariantCrawlerWebhook' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Webhook className="w-3.5 h-3.5" />}
-              Test Webhook
+            <Button size="sm" variant="outline" onClick={testWebhook} disabled={isBusy}>
+              {busy === 'testWebhook' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FlaskConical className="w-3.5 h-3.5" />}
+              Test Webhook Payload
             </Button>
             <Button size="sm" variant="outline" onClick={() => runFn('transformVariantSummary', 'Transform')} disabled={isBusy}>
               {busy === 'transformVariantSummary' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Layers className="w-3.5 h-3.5" />}
