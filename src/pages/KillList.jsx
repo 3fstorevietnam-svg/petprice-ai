@@ -2,224 +2,157 @@ import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import PageHeader from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Skull, Plus, AlertTriangle, CheckCircle, Package } from 'lucide-react';
+import { Skull, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
-
-const STATUS_COLORS = {
-  recommended: 'bg-yellow-100 text-yellow-800',
-  approved: 'bg-orange-100 text-orange-800',
-  liquidating: 'bg-purple-100 text-purple-800',
-  killed: 'bg-gray-100 text-gray-500',
-};
-
-const KILL_REASONS = [
-  { value: 'no_profit', label: 'No Profit' },
-  { value: 'dead_stock', label: 'Dead Stock' },
-  { value: 'supplier_discontinued', label: 'Supplier Discontinued' },
-  { value: 'strategy_change', label: 'Strategy Change' },
-  { value: 'high_return_rate', label: 'High Return Rate' },
-  { value: 'ai_recommended', label: 'AI Recommended' },
-];
 
 export default function KillList() {
   const [items, setItems] = useState([]);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showDialog, setShowDialog] = useState(false);
-  const [form, setForm] = useState({ product_id: '', kill_reason: 'no_profit', kill_date: format(new Date(), 'yyyy-MM-dd'), remaining_stock: '', avg_margin_last_30d: '', notes: '' });
-  const [saving, setSaving] = useState(false);
+  const [processing, setProcessing] = useState({});
 
-  const load = async () => {
+  const load = () => {
     setLoading(true);
-    const [k, p] = await Promise.all([
-      base44.entities.KillList.list('-created_date', 100),
+    Promise.all([
+      base44.entities.AISuggestion.filter({ suggested_action: 'KILL_SKU' }, '-rec_date', 200),
       base44.entities.Product.list('-created_date', 200),
-    ]);
-    setItems(k);
-    setProducts(p);
-    setLoading(false);
+    ]).then(([sugg, prods]) => {
+      setItems(sugg);
+      setProducts(prods);
+      setLoading(false);
+    });
   };
 
   useEffect(() => { load(); }, []);
 
-  const handleSave = async () => {
-    setSaving(true);
-    const product = products.find(p => p.id === form.product_id);
-    await base44.entities.KillList.create({
-      ...form,
-      sku_code: product?.sku_code || '',
-      product_name: product?.product_name || '',
-      remaining_stock: parseInt(form.remaining_stock) || 0,
-      avg_margin_last_30d: parseFloat(form.avg_margin_last_30d) || 0,
-    });
-    if (product) await base44.entities.Product.update(form.product_id, { status: 'inactive' });
-    setShowDialog(false);
+  const productMap = products.reduce((acc, p) => { acc[p.sku] = p; return acc; }, {});
+
+  const act = async (id, status) => {
+    setProcessing(p => ({ ...p, [id]: true }));
+    await base44.entities.AISuggestion.update(id, { status });
+    toast.success(status === 'approved' ? '✅ Đã xác nhận kill SKU' : '❌ Đã từ chối');
     load();
-    toast.success('SKU added to kill list');
-    setSaving(false);
+    setProcessing(p => ({ ...p, [id]: false }));
   };
 
-  const approve = async (id) => {
-    await base44.entities.KillList.update(id, { status: 'approved', approved_at: new Date().toISOString() });
-    load();
-    toast.success('Kill approved');
+  const killProduct = async (sku) => {
+    const p = productMap[sku];
+    if (p) { await base44.entities.Product.update(p.id, { status: 'killed' }); toast.success(`SKU ${sku} đã được đánh dấu killed`); load(); }
   };
 
-  const markKilled = async (id, productId) => {
-    await base44.entities.KillList.update(id, { status: 'killed' });
-    if (productId) await base44.entities.Product.update(productId, { status: 'killed' });
-    load();
-    toast.success('SKU marked as killed');
-  };
+  const pending = items.filter(i => i.status === 'pending');
+  const approved = items.filter(i => i.status === 'approved');
+  const others = items.filter(i => !['pending','approved'].includes(i.status));
 
-  const totalStockValue = items.reduce((sum, i) => sum + (i.stock_value || 0), 0);
+  function ItemCard({ item, showActions }) {
+    const p = productMap[item.sku];
+    const isKilled = p?.status === 'killed';
+    return (
+      <div className={cn('bg-card border rounded-xl p-5 space-y-3', isKilled ? 'border-gray-200 bg-gray-50 opacity-70' : 'border-red-200 bg-red-50/20')}>
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            <Skull className={cn('w-5 h-5 flex-shrink-0', isKilled ? 'text-gray-400' : 'text-red-500')} />
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono font-bold text-base">{item.sku}</span>
+                {p && <span className="text-sm text-muted-foreground">— {p.name}</span>}
+                {isKilled && <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full font-semibold">KILLED</span>}
+                {!isKilled && p?.status === 'paused' && <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full font-semibold">PAUSED</span>}
+              </div>
+              <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
+                {p?.current_price && <span>Giá: <span className="font-mono text-foreground">₫{parseFloat(p.current_price).toLocaleString()}</span></span>}
+                {p?.cost && <span>Vốn: <span className="font-mono text-foreground">₫{parseFloat(p.cost).toLocaleString()}</span></span>}
+                {item.current_margin !== null && item.current_margin !== undefined && (
+                  <span className={cn('font-semibold', item.current_margin < 0 ? 'text-red-600' : 'text-muted-foreground')}>
+                    Margin: {parseFloat(item.current_margin).toFixed(1)}%
+                  </span>
+                )}
+                <span>Ngày gợi ý: {item.rec_date}</span>
+                {item.confidence && <span>Confidence: {item.confidence}%</span>}
+              </div>
+            </div>
+          </div>
+          <span className={cn('text-xs font-semibold px-2.5 py-1 rounded-full',
+            item.status === 'pending' ? 'bg-orange-100 text-orange-700' :
+            item.status === 'approved' ? 'bg-red-100 text-red-700' :
+            item.status === 'rejected' ? 'bg-muted text-muted-foreground' : 'bg-muted text-muted-foreground'
+          )}>{item.status}</span>
+        </div>
+
+        {item.reason && (
+          <div className="bg-white/70 border border-red-100 rounded-lg px-4 py-2.5">
+            <p className="text-xs font-semibold text-muted-foreground mb-1">Lý do AI:</p>
+            <p className="text-sm text-foreground leading-relaxed">{item.reason}</p>
+          </div>
+        )}
+
+        {showActions && !isKilled && (
+          <div className="flex items-center gap-2 pt-1">
+            {item.status === 'pending' && (
+              <>
+                <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white font-semibold gap-2"
+                  onClick={() => act(item.id, 'approved')} disabled={processing[item.id]}>
+                  <Skull className="w-3.5 h-3.5" />Xác nhận Kill
+                </Button>
+                <Button size="sm" variant="outline" className="border-gray-200 text-gray-600 gap-2"
+                  onClick={() => act(item.id, 'rejected')} disabled={processing[item.id]}>
+                  <XCircle className="w-3.5 h-3.5" />Không Kill
+                </Button>
+              </>
+            )}
+            {item.status === 'approved' && (
+              <Button size="sm" className="bg-gray-800 hover:bg-gray-900 text-white font-semibold gap-2"
+                onClick={() => killProduct(item.sku)} disabled={processing[item.id]}>
+                <Skull className="w-3.5 h-3.5" />Đánh Dấu Killed Trên App
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <PageHeader
-        title="SKU Kill List"
-        subtitle={`${items.filter(i => i.status !== 'killed').length} SKUs under evaluation`}
-        actions={
-          <Button size="sm" onClick={() => setShowDialog(true)}>
-            <Plus className="w-4 h-4 mr-1.5" />Flag SKU for Kill
-          </Button>
-        }
-      />
+      <PageHeader title="SKU Kill List" subtitle={`${pending.length} chờ quyết định, ${approved.length} đã xác nhận kill`} />
 
-      {/* Summary */}
-      <div className="flex items-center gap-6 px-6 py-3 border-b border-border bg-red-50/40 text-sm">
-        {[
-          { label: 'Total SKUs Flagged', value: items.length },
-          { label: 'Recommended', value: items.filter(i => i.status === 'recommended').length },
-          { label: 'Approved', value: items.filter(i => i.status === 'approved').length },
-          { label: 'Killed', value: items.filter(i => i.status === 'killed').length },
-        ].map(({ label, value }) => (
-          <div key={label}>
-            <span className="text-muted-foreground text-xs">{label}: </span>
-            <span className="font-semibold">{value}</span>
-          </div>
-        ))}
+      <div className="flex items-center gap-4 px-5 py-2 border-b border-border bg-red-50/30">
+        <AlertTriangle className="w-4 h-4 text-red-500" />
+        <p className="text-xs text-red-700 font-medium">Danh sách các SKU AI đề nghị ngừng kinh doanh. Admin phải xác nhận trước khi thực hiện.</p>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-3">
+      <div className="flex-1 overflow-y-auto p-5 space-y-6">
         {loading ? (
-          Array(5).fill(0).map((_, i) => (
-            <div key={i} className="bg-card border border-border rounded-xl p-5 animate-pulse h-24" />
-          ))
+          Array(3).fill(0).map((_, i) => <div key={i} className="bg-card border border-border rounded-xl p-5 animate-pulse h-32" />)
         ) : items.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-            <Skull className="w-12 h-12 mb-3 opacity-20" />
-            <p className="font-medium">Kill list is empty</p>
-            <p className="text-sm mt-1">Flag underperforming SKUs for review</p>
+            <CheckCircle className="w-12 h-12 mb-3 opacity-20" />
+            <p className="font-medium">Không có SKU nào cần kill</p>
           </div>
         ) : (
-          items.map(item => (
-            <div key={item.id} className={cn(
-              'bg-card border rounded-xl p-5',
-              item.status === 'recommended' ? 'border-yellow-200' :
-              item.status === 'approved' ? 'border-orange-200' :
-              item.status === 'killed' ? 'border-gray-200 opacity-60' :
-              'border-border'
-            )}>
-              <div className="flex items-start justify-between">
-                <div className="flex items-start gap-3">
-                  <Skull className={cn('w-4 h-4 mt-0.5 flex-shrink-0', item.status === 'killed' ? 'text-gray-400' : 'text-red-500')} />
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-semibold text-sm">{item.product_name || item.sku_code}</span>
-                      <span className="font-mono text-xs text-muted-foreground">{item.sku_code}</span>
-                      <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full', STATUS_COLORS[item.status])}>
-                        {item.status}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                      <span>Reason: <span className="text-foreground font-medium">{KILL_REASONS.find(r => r.value === item.kill_reason)?.label || item.kill_reason}</span></span>
-                      {item.remaining_stock !== undefined && <span>Stock: {item.remaining_stock} units</span>}
-                      {item.avg_margin_last_30d !== undefined && (
-                        <span className={cn('font-medium', item.avg_margin_last_30d < 0 ? 'text-red-500' : 'text-muted-foreground')}>
-                          Margin 30d: {item.avg_margin_last_30d.toFixed(1)}%
-                        </span>
-                      )}
-                      {item.kill_date && <span>Flagged: {item.kill_date}</span>}
-                    </div>
-                    {item.notes && <p className="text-xs text-muted-foreground mt-1">{item.notes}</p>}
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  {item.status === 'recommended' && (
-                    <Button size="sm" variant="outline" className="text-xs border-orange-200 text-orange-700 hover:bg-orange-50" onClick={() => approve(item.id)}>
-                      <CheckCircle className="w-3.5 h-3.5 mr-1" />Approve Kill
-                    </Button>
-                  )}
-                  {item.status === 'approved' && (
-                    <Button size="sm" variant="destructive" className="text-xs" onClick={() => markKilled(item.id, item.product_id)}>
-                      <Skull className="w-3.5 h-3.5 mr-1" />Mark Killed
-                    </Button>
-                  )}
-                </div>
+          <>
+            {pending.length > 0 && (
+              <div>
+                <h2 className="text-sm font-semibold text-orange-700 mb-3 flex items-center gap-2"><AlertTriangle className="w-4 h-4" />Chờ quyết định ({pending.length})</h2>
+                <div className="space-y-3">{pending.map(item => <ItemCard key={item.id} item={item} showActions />)}</div>
               </div>
-            </div>
-          ))
+            )}
+            {approved.length > 0 && (
+              <div>
+                <h2 className="text-sm font-semibold text-red-700 mb-3 flex items-center gap-2"><Skull className="w-4 h-4" />Đã xác nhận kill ({approved.length})</h2>
+                <div className="space-y-3">{approved.map(item => <ItemCard key={item.id} item={item} showActions />)}</div>
+              </div>
+            )}
+            {others.length > 0 && (
+              <div>
+                <h2 className="text-sm font-semibold text-muted-foreground mb-3">Đã xử lý ({others.length})</h2>
+                <div className="space-y-3">{others.map(item => <ItemCard key={item.id} item={item} showActions={false} />)}</div>
+              </div>
+            )}
+          </>
         )}
       </div>
-
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Flag SKU for Kill</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2">
-            <div>
-              <Label className="text-xs mb-1.5 block">Product *</Label>
-              <select className="w-full border border-input rounded-md px-3 py-1.5 text-sm bg-background"
-                value={form.product_id} onChange={e => setForm(f => ({ ...f, product_id: e.target.value }))}>
-                <option value="">Select product...</option>
-                {products.filter(p => p.status !== 'killed').map(p => (
-                  <option key={p.id} value={p.id}>{p.sku_code} — {p.product_name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <Label className="text-xs mb-1.5 block">Kill Reason *</Label>
-              <Select value={form.kill_reason} onValueChange={v => setForm(f => ({ ...f, kill_reason: v }))}>
-                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {KILL_REASONS.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label className="text-xs mb-1.5 block">Kill Date</Label>
-                <Input type="date" value={form.kill_date} onChange={e => setForm(f => ({ ...f, kill_date: e.target.value }))} className="h-8 text-sm" />
-              </div>
-              <div>
-                <Label className="text-xs mb-1.5 block">Remaining Stock</Label>
-                <Input type="number" value={form.remaining_stock} onChange={e => setForm(f => ({ ...f, remaining_stock: e.target.value }))} className="h-8 text-sm" />
-              </div>
-              <div>
-                <Label className="text-xs mb-1.5 block">Avg Margin 30d (%)</Label>
-                <Input type="number" value={form.avg_margin_last_30d} onChange={e => setForm(f => ({ ...f, avg_margin_last_30d: e.target.value }))} className="h-8 text-sm" />
-              </div>
-            </div>
-            <div>
-              <Label className="text-xs mb-1.5 block">Notes</Label>
-              <Input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className="h-8 text-sm" placeholder="Optional reason..." />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleSave} disabled={saving || !form.product_id}>
-              {saving ? 'Saving...' : 'Flag for Kill'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

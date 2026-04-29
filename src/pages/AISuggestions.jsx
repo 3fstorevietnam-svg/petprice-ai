@@ -1,50 +1,54 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import PageHeader from '@/components/PageHeader';
-import DataTable from '@/components/admin/DataTable';
 import FormDialog from '@/components/admin/FormDialog';
-import ActionBadge from '@/components/ActionBadge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { Brain, Plus, Sparkles, RefreshCw, Search } from 'lucide-react';
+import { Brain, Plus, Sparkles, RefreshCw, Search, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
-const ACTION_COLORS = {
-  GIU_GIA: 'bg-blue-100 text-blue-800',
-  TANG_GIA: 'bg-emerald-100 text-emerald-800',
-  GIAM_GIA: 'bg-red-100 text-red-800',
-  GOM_COMBO: 'bg-purple-100 text-purple-800',
-  KILL_SKU: 'bg-gray-100 text-gray-700',
+const ACTION_STYLES = {
+  GIU_GIA:  { cls: 'bg-blue-100 text-blue-800 border-blue-200',   label: 'GIỮ GIÁ' },
+  TANG_GIA: { cls: 'bg-emerald-100 text-emerald-800 border-emerald-200', label: 'TĂNG GIÁ' },
+  GIAM_GIA: { cls: 'bg-red-100 text-red-800 border-red-200',      label: 'GIẢM GIÁ' },
+  GOM_COMBO:{ cls: 'bg-purple-100 text-purple-800 border-purple-200', label: 'GOM COMBO' },
+  KILL_SKU: { cls: 'bg-gray-200 text-gray-700 border-gray-300',    label: 'KILL SKU' },
 };
-
-const ADS_ACTION_COLORS = {
-  GIU_NGUYEN: 'bg-muted text-muted-foreground',
-  CHAY_ADS: 'bg-orange-100 text-orange-800',
-  NGUNG_ADS: 'bg-yellow-100 text-yellow-800',
-  TEST_LAI_GIA_VA_CONTENT: 'bg-violet-100 text-violet-800',
+const ADS_STYLES = {
+  GIU_NGUYEN:            { cls: 'bg-muted text-muted-foreground',          label: 'Giữ Nguyên' },
+  CHAY_ADS:              { cls: 'bg-orange-100 text-orange-800',           label: 'CHẠY ADS' },
+  NGUNG_ADS:             { cls: 'bg-yellow-100 text-yellow-800',           label: 'NGỪNG ADS' },
+  TEST_LAI_GIA_VA_CONTENT:{ cls: 'bg-violet-100 text-violet-800',          label: 'Test Lại' },
 };
-
-const STATUS_COLORS = {
-  pending: 'bg-orange-100 text-orange-700',
+const STATUS_STYLES = {
+  pending:  'bg-orange-100 text-orange-700',
   approved: 'bg-emerald-100 text-emerald-700',
   rejected: 'bg-red-100 text-red-700',
-  testing: 'bg-blue-100 text-blue-700',
+  testing:  'bg-blue-100 text-blue-700',
 };
+
+const FILTER_BUTTONS = [
+  { key: 'all',        label: 'Tất cả' },
+  { key: 'pending',    label: '⏳ Chờ duyệt' },
+  { key: 'losing',     label: '🔴 Đang lỗ' },
+  { key: 'GOM_COMBO',  label: '🔵 Combo' },
+  { key: 'KILL_SKU',   label: '💀 Kill SKU' },
+  { key: 'NGUNG_ADS',  label: '🛑 Ngừng Ads' },
+  { key: 'CHAY_ADS',   label: '📢 Chạy Ads' },
+];
 
 const FIELDS = [
   { key: 'sku', label: 'SKU', required: true },
-  { key: 'rec_date', label: 'Recommendation Date', type: 'date', required: true },
+  { key: 'rec_date', label: 'Date', type: 'date', required: true },
   { key: 'current_price', label: 'Current Price (₫)', type: 'number' },
   { key: 'current_profit', label: 'Current Profit (₫)', type: 'number' },
-  { key: 'current_margin', label: 'Current Margin (%)', type: 'number', step: '0.01' },
-  { key: 'suggested_action', label: 'Suggested Action', type: 'select', options: ['GIU_GIA','TANG_GIA','GIAM_GIA','GOM_COMBO','KILL_SKU'].map(v => ({ value: v, label: v })) },
+  { key: 'current_margin', label: 'Margin (%)', type: 'number', step: '0.01' },
+  { key: 'suggested_action', label: 'Pricing Action', type: 'select', options: Object.entries(ACTION_STYLES).map(([v, c]) => ({ value: v, label: c.label })) },
   { key: 'suggested_price', label: 'Suggested Price (₫)', type: 'number' },
-  { key: 'suggested_combo_qty', label: 'Suggested Combo Qty', type: 'number' },
-  { key: 'ads_action', label: 'Ads Action', type: 'select', options: ['GIU_NGUYEN','CHAY_ADS','NGUNG_ADS','TEST_LAI_GIA_VA_CONTENT'].map(v => ({ value: v, label: v })) },
+  { key: 'suggested_combo_qty', label: 'Combo Qty', type: 'number' },
+  { key: 'ads_action', label: 'Ads Action', type: 'select', options: Object.entries(ADS_STYLES).map(([v, c]) => ({ value: v, label: c.label })) },
   { key: 'confidence', label: 'Confidence (0-100)', type: 'number' },
   { key: 'status', label: 'Status', type: 'select', options: ['pending','approved','rejected','testing'].map(v => ({ value: v, label: v })) },
   { key: 'reason', label: 'Reason', type: 'textarea', fullWidth: true },
@@ -53,21 +57,48 @@ const FIELDS = [
 
 const DEFAULTS = { sku: '', rec_date: format(new Date(), 'yyyy-MM-dd'), suggested_action: 'GIU_GIA', ads_action: 'GIU_NGUYEN', status: 'pending', confidence: 70 };
 
+function ConfidenceBar({ value }) {
+  const pct = Math.min(100, Math.max(0, value || 0));
+  const color = pct >= 80 ? 'bg-emerald-500' : pct >= 60 ? 'bg-yellow-500' : 'bg-red-400';
+  return (
+    <div className="flex items-center gap-1.5 w-20">
+      <div className="flex-1 bg-muted rounded-full h-1.5">
+        <div className={cn('h-1.5 rounded-full', color)} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="text-[10px] text-muted-foreground w-8 text-right">{pct}%</span>
+    </div>
+  );
+}
+
+function ReasonExpand({ text }) {
+  const [open, setOpen] = useState(false);
+  if (!text) return <span className="text-muted-foreground/40 text-xs italic">—</span>;
+  return (
+    <div className="max-w-[220px]">
+      <p className={cn('text-xs text-muted-foreground leading-relaxed', !open && 'line-clamp-2')}>{text}</p>
+      {text.length > 80 && (
+        <button onClick={() => setOpen(v => !v)} className="text-[10px] text-primary hover:underline mt-0.5 flex items-center gap-0.5">
+          {open ? 'Thu gọn' : 'Xem thêm'} <ChevronDown className={cn('w-3 h-3 transition-transform', open && 'rotate-180')} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function AISuggestions() {
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [activeFilter, setActiveFilter] = useState('all');
   const [skuSearch, setSkuSearch] = useState('');
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(DEFAULTS);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [detailRow, setDetailRow] = useState(null);
 
   const load = () => {
     setLoading(true);
-    base44.entities.AISuggestion.list('-rec_date', 200).then(d => { setSuggestions(d); setLoading(false); });
+    base44.entities.AISuggestion.list('-rec_date', 300).then(d => { setSuggestions(d); setLoading(false); });
   };
 
   useEffect(() => { load(); }, []);
@@ -86,17 +117,11 @@ export default function AISuggestions() {
     load();
     setSaving(false);
   };
-
-  const handleDelete = async () => {
-    await base44.entities.AISuggestion.delete(editing.id);
-    toast.success('Deleted');
-    setOpen(false);
-    load();
-  };
+  const handleDelete = async () => { await base44.entities.AISuggestion.delete(editing.id); toast.success('Deleted'); setOpen(false); load(); };
 
   const quickStatus = async (row, status) => {
     await base44.entities.AISuggestion.update(row.id, { status });
-    toast.success(`Marked as ${status}`);
+    toast.success(`Marked ${status}`);
     load();
   };
 
@@ -107,84 +132,125 @@ export default function AISuggestions() {
       toast.success(`Generated ${res.data?.created || 0} new suggestions`);
       load();
     } catch (e) {
-      toast.error('AI analysis failed: ' + e.message);
+      toast.error('AI analysis failed');
     } finally {
       setGenerating(false);
     }
   };
 
-  const filtered = suggestions.filter(s =>
-    (statusFilter === 'all' || s.status === statusFilter) &&
-    (!skuSearch || s.sku?.toLowerCase().includes(skuSearch.toLowerCase()))
-  );
-
-  const columns = [
-    { key: 'sku', label: 'SKU', render: v => <span className="font-mono text-xs font-medium">{v}</span> },
-    { key: 'rec_date', label: 'Date', render: v => <span className="text-xs">{v}</span> },
-    { key: 'suggested_action', label: 'Pricing Action', render: v => v ? <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-md border', ACTION_COLORS[v])}>{v}</span> : '—' },
-    { key: 'ads_action', label: 'Ads Action', render: v => v ? <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-md', ADS_ACTION_COLORS[v])}>{v}</span> : '—' },
-    { key: 'current_price', label: 'Curr. Price', render: v => v ? <span className="font-mono text-xs">₫{parseFloat(v).toLocaleString()}</span> : '—' },
-    { key: 'suggested_price', label: 'Sugg. Price', render: (v, row) => {
-      if (!v) return '—';
-      const delta = v - (row.current_price || 0);
-      return (
-        <div>
-          <span className="font-mono text-xs font-semibold">₫{parseFloat(v).toLocaleString()}</span>
-          {delta !== 0 && <span className={cn('text-xs ml-1', delta > 0 ? 'text-emerald-600' : 'text-red-500')}>{delta > 0 ? '+' : ''}{((delta / (row.current_price || 1)) * 100).toFixed(1)}%</span>}
-        </div>
-      );
-    }},
-    { key: 'current_margin', label: 'Margin', render: v => v !== undefined && v !== null ? <span className={cn('text-xs font-medium', v >= 15 ? 'text-emerald-600' : v >= 0 ? 'text-yellow-600' : 'text-red-500')}>{parseFloat(v).toFixed(1)}%</span> : '—' },
-    { key: 'confidence', label: 'Confidence', render: v => v ? <span className="text-xs">{v}%</span> : '—' },
-    { key: 'status', label: 'Status', render: (v, row) => (
-      <div className="flex items-center gap-1.5">
-        <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full', STATUS_COLORS[v])}>{v}</span>
-        {v === 'pending' && (
-          <div className="flex gap-1 ml-1">
-            <button onClick={e => { e.stopPropagation(); quickStatus(row, 'approved'); }} className="text-xs text-emerald-700 hover:underline font-medium">✓</button>
-            <button onClick={e => { e.stopPropagation(); quickStatus(row, 'rejected'); }} className="text-xs text-red-600 hover:underline font-medium">✕</button>
-          </div>
-        )}
-      </div>
-    )},
-  ];
+  const filtered = suggestions.filter(s => {
+    const matchSku = !skuSearch || s.sku?.toLowerCase().includes(skuSearch.toLowerCase());
+    if (!matchSku) return false;
+    if (activeFilter === 'all') return true;
+    if (activeFilter === 'pending') return s.status === 'pending';
+    if (activeFilter === 'losing') return (s.current_profit !== undefined && s.current_profit !== null && s.current_profit < 0) || (s.current_margin !== undefined && s.current_margin !== null && s.current_margin < 0);
+    if (activeFilter === 'NGUNG_ADS') return s.ads_action === 'NGUNG_ADS';
+    if (activeFilter === 'CHAY_ADS') return s.ads_action === 'CHAY_ADS';
+    return s.suggested_action === activeFilter;
+  });
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <PageHeader
-        title="AI Pricing Suggestions"
-        subtitle={`${suggestions.filter(s => s.status === 'pending').length} pending approval`}
+      <PageHeader title="AI Pricing Suggestions" subtitle={`${suggestions.filter(s => s.status === 'pending').length} pending approval`}
         actions={
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={openCreate}><Plus className="w-4 h-4 mr-1.5" />Manual Entry</Button>
+            <Button size="sm" variant="outline" onClick={openCreate}><Plus className="w-4 h-4 mr-1.5" />Manual</Button>
             <Button size="sm" onClick={generateSuggestions} disabled={generating}>
               {generating ? <RefreshCw className="w-4 h-4 mr-1.5 animate-spin" /> : <Sparkles className="w-4 h-4 mr-1.5" />}
-              {generating ? 'Analyzing...' : 'Run AI Analysis'}
+              {generating ? 'Đang phân tích...' : 'Chạy AI'}
             </Button>
           </div>
         }
       />
 
-      <div className="flex items-center gap-3 px-5 py-3 border-b border-border bg-card/30 flex-shrink-0">
-        <div className="relative max-w-xs flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Filter by SKU..." className="pl-9 h-8 text-sm" value={skuSearch} onChange={e => setSkuSearch(e.target.value)} />
+      {/* Filter Bar */}
+      <div className="flex items-center gap-2 px-5 py-3 border-b border-border bg-card/30 flex-shrink-0 overflow-x-auto">
+        {FILTER_BUTTONS.map(f => (
+          <button key={f.key} onClick={() => setActiveFilter(f.key)}
+            className={cn('px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all border',
+              activeFilter === f.key ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted text-muted-foreground border-transparent hover:border-border hover:text-foreground'
+            )}>
+            {f.label}
+          </button>
+        ))}
+        <div className="relative ml-auto flex-shrink-0">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <Input placeholder="SKU..." className="pl-8 h-7 text-xs w-32" value={skuSearch} onChange={e => setSkuSearch(e.target.value)} />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-32 h-8 text-sm"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="approved">Approved</SelectItem>
-            <SelectItem value="rejected">Rejected</SelectItem>
-            <SelectItem value="testing">Testing</SelectItem>
-          </SelectContent>
-        </Select>
-        <span className="text-xs text-muted-foreground ml-auto">{filtered.length} records</span>
+        <span className="text-xs text-muted-foreground flex-shrink-0">{filtered.length}</span>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
-        <DataTable columns={columns} data={filtered} loading={loading} emptyIcon={Brain} emptyText="No suggestions yet. Run AI Analysis to generate recommendations." onRowClick={openEdit} />
+      <div className="flex-1 overflow-auto">
+        <table className="w-full text-xs min-w-[1300px]">
+          <thead className="sticky top-0 z-10">
+            <tr className="border-b border-border bg-muted/80 backdrop-blur">
+              {['SKU', 'Ngày', 'Giá hiện tại', 'Lợi nhuận', 'Margin', 'Hành động', 'Giá đề xuất', 'Combo Qty', 'Ads', 'Confidence', 'Lý do', 'Trạng thái', ''].map(h => (
+                <th key={h} className="text-left px-3 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {loading ? Array(5).fill(0).map((_, i) => (
+              <tr key={i}>{Array(13).fill(0).map((_, j) => <td key={j} className="px-3 py-3"><div className="h-3 bg-muted rounded animate-pulse" /></td>)}</tr>
+            )) : filtered.length === 0 ? (
+              <tr><td colSpan={13} className="py-16 text-center text-muted-foreground">
+                <Brain className="w-8 h-8 mx-auto mb-2 opacity-20" />Không có dữ liệu. Nhấn "Chạy AI" để tạo gợi ý.
+              </td></tr>
+            ) : filtered.map(s => {
+              const isLosing = (s.current_profit !== null && s.current_profit !== undefined && s.current_profit < 0) || (s.current_margin !== null && s.current_margin !== undefined && s.current_margin < 0);
+              const actionStyle = ACTION_STYLES[s.suggested_action] || {};
+              const adsStyle = ADS_STYLES[s.ads_action] || {};
+              return (
+                <tr key={s.id} className={cn('hover:bg-muted/20 transition-colors', isLosing && 'bg-red-50 hover:bg-red-50/70', s.suggested_action === 'GOM_COMBO' && !isLosing && 'bg-purple-50/40', s.suggested_action === 'KILL_SKU' && !isLosing && 'bg-gray-50')}>
+                  <td className="px-3 py-2.5"><span className="font-mono font-semibold">{s.sku}</span></td>
+                  <td className="px-3 py-2.5 text-muted-foreground">{s.rec_date}</td>
+                  <td className="px-3 py-2.5 font-mono">{s.current_price ? `₫${parseFloat(s.current_price).toLocaleString()}` : '—'}</td>
+                  <td className="px-3 py-2.5">
+                    {s.current_profit !== null && s.current_profit !== undefined ? (
+                      <span className={cn('font-mono font-bold', s.current_profit < 0 ? 'text-red-600' : 'text-emerald-600')}>
+                        ₫{parseFloat(s.current_profit).toLocaleString('vi-VN', { maximumFractionDigits: 0 })}
+                      </span>
+                    ) : '—'}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    {s.current_margin !== null && s.current_margin !== undefined ? (
+                      <span className={cn('font-bold', s.current_margin < 0 ? 'text-red-600' : s.current_margin < 10 ? 'text-yellow-600' : 'text-emerald-600')}>
+                        {parseFloat(s.current_margin).toFixed(1)}%
+                      </span>
+                    ) : '—'}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    {s.suggested_action ? <span className={cn('text-[10px] font-bold px-2 py-1 rounded-md border', actionStyle.cls)}>{actionStyle.label || s.suggested_action}</span> : '—'}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    {s.suggested_price ? (
+                      <div>
+                        <span className="font-mono font-semibold">₫{parseFloat(s.suggested_price).toLocaleString()}</span>
+                        {s.current_price && (
+                          <span className={cn('text-[10px] ml-1', parseFloat(s.suggested_price) > parseFloat(s.current_price) ? 'text-emerald-600' : 'text-red-500')}>
+                            {((parseFloat(s.suggested_price) - parseFloat(s.current_price)) / parseFloat(s.current_price) * 100).toFixed(1)}%
+                          </span>
+                        )}
+                      </div>
+                    ) : '—'}
+                  </td>
+                  <td className="px-3 py-2.5 text-center">{s.suggested_combo_qty || '—'}</td>
+                  <td className="px-3 py-2.5">
+                    {s.ads_action ? <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full', adsStyle.cls)}>{adsStyle.label || s.ads_action}</span> : '—'}
+                  </td>
+                  <td className="px-3 py-2.5"><ConfidenceBar value={s.confidence} /></td>
+                  <td className="px-3 py-2.5"><ReasonExpand text={s.reason} /></td>
+                  <td className="px-3 py-2.5">
+                    <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full', STATUS_STYLES[s.status])}>{s.status}</span>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <Button variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={() => openEdit(s)}>Edit</Button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
 
       <FormDialog open={open} onOpenChange={setOpen} title="AI Suggestion" fields={FIELDS} form={form} onChange={onChange} onSave={handleSave} onDelete={editing ? handleDelete : undefined} saving={saving} editing={editing} />
