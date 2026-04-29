@@ -6,9 +6,10 @@ import { Button } from '@/components/ui/button';
 import {
   Package, TrendingDown, Layers, TrendingUp, Skull,
   Megaphone, MegaphoneOff, AlertTriangle, ArrowRight,
-  DollarSign, Zap
+  DollarSign, Zap, RefreshCw, Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 function KpiCard({ label, value, icon: Icon, color = 'default', sub }) {
   const colors = {
@@ -84,13 +85,30 @@ export default function Dashboard() {
   const [products, setProducts] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState(false);
 
-  useEffect(() => {
+  const loadData = () => {
     Promise.all([
       base44.entities.Product.list('-created_date', 200),
       base44.entities.AISuggestion.list('-rec_date', 300),
     ]).then(([p, s]) => { setProducts(p); setSuggestions(s); setLoading(false); });
-  }, []);
+  };
+
+  useEffect(() => { loadData(); }, []);
+
+  const runAI = async () => {
+    setRunning(true);
+    try {
+      const res = await base44.functions.invoke('generatePricingSuggestions', {});
+      const { created = 0, skipped = 0, processed = 0 } = res.data || {};
+      toast.success(`✅ AI xong! ${processed} SKUs xử lý — ${created} gợi ý mới, ${skipped} đã có.`);
+      loadData();
+    } catch (e) {
+      toast.error('AI analysis thất bại: ' + e.message);
+    } finally {
+      setRunning(false);
+    }
+  };
 
   function calcProfit(p) {
     if (!p?.current_price || !p?.cost) return null;
@@ -122,7 +140,14 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <PageHeader title="Overview Dashboard" subtitle="Operational summary — all SKUs" />
+      <PageHeader title="Overview Dashboard" subtitle="Operational summary — all SKUs"
+        actions={
+          <Button onClick={runAI} disabled={running} className="gap-2 bg-primary hover:bg-primary/90 font-semibold">
+            {running ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            {running ? 'Đang chạy AI...' : 'Run AI Suggestions Now'}
+          </Button>
+        }
+      />
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
         {/* KPI Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
