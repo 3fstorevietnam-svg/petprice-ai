@@ -5,10 +5,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import FormDialog from '@/components/admin/FormDialog';
-import { Plus, Search, Package, AlertTriangle, Upload } from 'lucide-react';
+import { Plus, Search, Package, AlertTriangle, Upload, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import ImportProductsModal from '@/components/products/ImportProductsModal';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
 const STATUS_COLORS = { active: 'bg-emerald-100 text-emerald-800', paused: 'bg-yellow-100 text-yellow-800', killed: 'bg-red-100 text-red-700' };
 const ROLE_COLORS = { moi: 'bg-purple-100 text-purple-800', core: 'bg-blue-100 text-blue-800', upsell: 'bg-orange-100 text-orange-800' };
@@ -89,6 +90,8 @@ export default function Products() {
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null); // product object to delete
+  const [deleting, setDeleting] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -122,6 +125,47 @@ export default function Products() {
     setSaving(false);
   };
   const handleDelete = async () => { await base44.entities.Product.delete(editing.id); toast.success('Deleted'); setOpen(false); load(); };
+
+  const handleDeleteWithRelated = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    const sku = deleteTarget.sku;
+    const id = deleteTarget.id;
+    try {
+      // Delete all related records by SKU in parallel
+      const [dp, ai, mps, msd, mvs, mvsd, seeds, vmr, ptl] = await Promise.all([
+        base44.entities.DailyPerformance.filter({ sku }),
+        base44.entities.AISuggestion.filter({ sku }),
+        base44.entities.MarketPriceSnapshotRaw.filter({ sku }),
+        base44.entities.MarketSummaryDaily.filter({ sku }),
+        base44.entities.MarketVariantSnapshotRaw.filter({ sku }),
+        base44.entities.MarketVariantSummaryDaily.filter({ sku }),
+        base44.entities.MarketProductSeed.filter({ sku }),
+        base44.entities.VariantMatchRule.filter({ sku }),
+        base44.entities.PriceTestLog.filter({ sku }),
+      ]);
+      await Promise.all([
+        ...dp.map(r => base44.entities.DailyPerformance.delete(r.id)),
+        ...ai.map(r => base44.entities.AISuggestion.delete(r.id)),
+        ...mps.map(r => base44.entities.MarketPriceSnapshotRaw.delete(r.id)),
+        ...msd.map(r => base44.entities.MarketSummaryDaily.delete(r.id)),
+        ...mvs.map(r => base44.entities.MarketVariantSnapshotRaw.delete(r.id)),
+        ...mvsd.map(r => base44.entities.MarketVariantSummaryDaily.delete(r.id)),
+        ...seeds.map(r => base44.entities.MarketProductSeed.delete(r.id)),
+        ...vmr.map(r => base44.entities.VariantMatchRule.delete(r.id)),
+        ...ptl.map(r => base44.entities.PriceTestLog.delete(r.id)),
+      ]);
+      await base44.entities.Product.delete(id);
+      const total = dp.length + ai.length + mps.length + msd.length + mvs.length + mvsd.length + seeds.length + vmr.length + ptl.length;
+      toast.success(`Đã xóa SKU "${sku}" và ${total} bản ghi liên quan`);
+      setDeleteTarget(null);
+      load();
+    } catch (err) {
+      toast.error('Xóa thất bại: ' + err.message);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const suggestionMap = suggestions.reduce((acc, s) => { acc[s.sku] = s; return acc; }, {});
 
@@ -162,7 +206,7 @@ export default function Products() {
         <table className="w-full text-xs min-w-[1400px]">
           <thead className="sticky top-0 z-10">
             <tr className="border-b border-border bg-muted/80 backdrop-blur">
-              {['SKU', 'Name', 'Category', 'Cost', 'Price', 'Profit', 'Margin', 'Mkt Avg', 'Comp. Price', 'Rank', 'Vs Market', 'Var Comp.', 'Var Key', 'Sugg. Price', 'Role', 'Combo Qty', 'Status', '⚠'].map(h => (
+              {['SKU', 'Name', 'Category', 'Cost', 'Price', 'Profit', 'Margin', 'Mkt Avg', 'Comp. Price', 'Rank', 'Vs Market', 'Var Comp.', 'Var Key', 'Sugg. Price', 'Role', 'Combo Qty', 'Status', '⚠', ''].map(h => (
                 <th key={h} className="text-left px-3 py-2.5 font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap text-[10px]">{h}</th>
               ))}
             </tr>
@@ -170,10 +214,10 @@ export default function Products() {
           <tbody className="divide-y divide-border">
             {loading ? Array(6).fill(0).map((_, i) => (
               <tr key={i}>
-                {Array(18).fill(0).map((_, j) => <td key={j} className="px-3 py-3"><div className="h-3 bg-muted rounded animate-pulse" /></td>)}
+                {Array(19).fill(0).map((_, j) => <td key={j} className="px-3 py-3"><div className="h-3 bg-muted rounded animate-pulse" /></td>)}
               </tr>
             )) : filtered.length === 0 ? (
-              <tr><td colSpan={18} className="py-16 text-center text-muted-foreground">
+              <tr><td colSpan={19} className="py-16 text-center text-muted-foreground">
                 <Package className="w-8 h-8 mx-auto mb-2 opacity-20" />No products found.
               </td></tr>
             ) : filtered.map(p => {
@@ -268,6 +312,11 @@ export default function Products() {
                   <td className="px-3 py-2.5 text-center">
                     {isLosing && <AlertTriangle className="w-3.5 h-3.5 text-red-500 mx-auto" />}
                   </td>
+                  <td className="px-3 py-2.5 text-center">
+                    <button onClick={() => setDeleteTarget(p)} className="p-1 rounded hover:bg-red-100 text-muted-foreground hover:text-red-600 transition-colors" title="Xóa sản phẩm">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </td>
                 </tr>
               );
             })}
@@ -276,6 +325,25 @@ export default function Products() {
       </div>
 
       <ImportProductsModal open={importOpen} onOpenChange={setImportOpen} onImportDone={load} />
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={v => { if (!v) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-red-600"><Trash2 className="w-4 h-4" />Xóa sản phẩm?</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span className="block">Bạn sắp xóa SKU <strong className="font-mono text-foreground">{deleteTarget?.sku}</strong> — <span className="text-foreground">{deleteTarget?.name}</span>.</span>
+              <span className="block text-red-600 font-medium">Tất cả dữ liệu liên quan sẽ bị xóa vĩnh viễn, bao gồm: hiệu suất hàng ngày, gợi ý AI, snapshot thị trường, dữ liệu variant, seed, match rules, và price test log.</span>
+              <span className="block">Hành động này không thể hoàn tác.</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Hủy</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteWithRelated} disabled={deleting} className="bg-red-600 hover:bg-red-700 focus:ring-red-600">
+              {deleting ? 'Đang xóa...' : 'Xóa tất cả'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <FormDialog open={open} onOpenChange={setOpen} title="Product" fields={FIELDS} form={form}
         onChange={(k, v) => setForm(f => ({ ...f, [k]: v }))}
