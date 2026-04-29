@@ -1,0 +1,83 @@
+{
+  "name": "MarketProductSeed",
+  "type": "object",
+  "properties": {
+    "sku": {
+      "type": "string"
+    },
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "metric_csv",
+        "metric_api",
+        "manual"
+      ]
+    },
+    "seed_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "product_name": {
+      "type": "string"
+    },
+    "product_link": {
+      "type": "string"
+    },
+    "product_id": {
+      "type": "string"
+    },
+    "shop_link": {
+      "type": "string"
+    },
+    "shop_name": {
+      "type": "string"
+    },
+    "brand": {
+      "type": "string"
+    },
+    "category_path": {
+      "type": "string"
+    },
+    "parent_price": {
+      "type": "number"
+    },
+    "variant_price_min": {
+      "type": "number"
+    },
+    "variant_price_max": {
+      "type": "number"
+    },
+    "sold_count": {
+      "type": "number"
+    },
+    "revenue": {
+      "type": "number"
+    },
+    "needs_variant_analysis": {
+      "type": "boolean",
+      "default": true
+    },
+    "crawl_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "queued",
+        "crawled",
+        "failed",
+        "ignored"
+      ],
+      "default": "pending"
+    },
+    "last_crawled_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_error": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "sku",
+    "product_link"
+  ]
+}

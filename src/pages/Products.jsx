@@ -155,7 +155,7 @@ export default function Products() {
         <table className="w-full text-xs min-w-[1400px]">
           <thead className="sticky top-0 z-10">
             <tr className="border-b border-border bg-muted/80 backdrop-blur">
-              {['SKU', 'Name', 'Category', 'Cost', 'Price', 'Profit', 'Margin', 'Mkt Avg', 'Comp. Price', 'Rank', 'Vs Market', 'Sugg. Price', 'Role', 'Combo Qty', 'Status', '⚠'].map(h => (
+              {['SKU', 'Name', 'Category', 'Cost', 'Price', 'Profit', 'Margin', 'Mkt Avg', 'Comp. Price', 'Rank', 'Vs Market', 'Var Comp.', 'Var Key', 'Sugg. Price', 'Role', 'Combo Qty', 'Status', '⚠'].map(h => (
                 <th key={h} className="text-left px-3 py-2.5 font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap text-[10px]">{h}</th>
               ))}
             </tr>
@@ -163,10 +163,10 @@ export default function Products() {
           <tbody className="divide-y divide-border">
             {loading ? Array(6).fill(0).map((_, i) => (
               <tr key={i}>
-                {Array(16).fill(0).map((_, j) => <td key={j} className="px-3 py-3"><div className="h-3 bg-muted rounded animate-pulse" /></td>)}
+                {Array(18).fill(0).map((_, j) => <td key={j} className="px-3 py-3"><div className="h-3 bg-muted rounded animate-pulse" /></td>)}
               </tr>
             )) : filtered.length === 0 ? (
-              <tr><td colSpan={16} className="py-16 text-center text-muted-foreground">
+              <tr><td colSpan={18} className="py-16 text-center text-muted-foreground">
                 <Package className="w-8 h-8 mx-auto mb-2 opacity-20" />No products found.
               </td></tr>
             ) : filtered.map(p => {
@@ -222,6 +222,21 @@ export default function Products() {
                       if (diff < -3) return <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">↓ Below</span>;
                       return <span className="text-[10px] font-semibold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">~ Near</span>;
                     })() : <span className="opacity-30 text-[10px]">—</span>}
+                  </td>
+                  {/* Variant Deep Crawl columns */}
+                  <td className="px-3 py-2.5 font-mono">
+                    {p.market_variant_ready && p.strongest_variant_competitor_price ? (
+                      <span className="font-semibold text-violet-600">₫{parseFloat(p.strongest_variant_competitor_price).toLocaleString()}</span>
+                    ) : <span className="opacity-30 text-[10px]">—</span>}
+                  </td>
+                  <td className="px-3 py-2.5 max-w-[120px]">
+                    {p.strongest_variant_key ? (
+                      <span className="text-[10px] font-mono bg-violet-50 text-violet-700 px-1.5 py-0.5 rounded truncate block" title={p.strongest_variant_key}>
+                        {p.strongest_variant_key.slice(0, 30)}
+                      </span>
+                    ) : p.market_variant_ready ? (
+                      <span className="text-[10px] text-muted-foreground">ready</span>
+                    ) : <span className="opacity-30 text-[10px]">—</span>}
                   </td>
                   <td className="px-3 py-2.5">
                     {sugg?.suggested_price ? (

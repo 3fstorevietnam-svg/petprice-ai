@@ -18,6 +18,9 @@ import PriceTestLog from '@/pages/PriceTestLog';
 import AppSettingsPage from '@/pages/AppSettingsPage';
 import MarketConnection from '@/pages/MarketConnection';
 import CompetitorSyncCenter from '@/pages/CompetitorSyncCenter';
+import VariantSeedManager from '@/pages/VariantSeedManager';
+import VariantCrawlCenter from '@/pages/VariantCrawlCenter';
+import VariantMatchRules from '@/pages/VariantMatchRules';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -53,6 +56,9 @@ const AuthenticatedApp = () => {
         <Route path="/settings" element={<AppSettingsPage />} />
         <Route path="/market-connection" element={<MarketConnection />} />
         <Route path="/competitor-sync" element={<CompetitorSyncCenter />} />
+        <Route path="/variant-seeds" element={<VariantSeedManager />} />
+        <Route path="/variant-crawl" element={<VariantCrawlCenter />} />
+        <Route path="/variant-match" element={<VariantMatchRules />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>

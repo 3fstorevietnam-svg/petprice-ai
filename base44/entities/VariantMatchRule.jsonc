@@ -1,0 +1,40 @@
+{
+  "name": "VariantMatchRule",
+  "type": "object",
+  "properties": {
+    "sku": {
+      "type": "string"
+    },
+    "internal_variant_label": {
+      "type": "string"
+    },
+    "normalized_weight": {
+      "type": "string"
+    },
+    "normalized_volume": {
+      "type": "string"
+    },
+    "normalized_pack_count": {
+      "type": "number"
+    },
+    "normalized_flavor": {
+      "type": "string"
+    },
+    "normalized_type": {
+      "type": "string"
+    },
+    "matching_keywords": {
+      "type": "string"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "sku"
+  ]
+}

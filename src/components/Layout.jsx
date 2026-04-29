@@ -2,7 +2,7 @@ import { Outlet, NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Package, BarChart3, Brain,
   CheckSquare, Layers, Skull, TrendingUp, Settings,
-  TestTube, Zap, Globe, Wifi
+  TestTube, Zap, Globe, Wifi, Dna, Microscope, GitMerge
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -19,6 +19,9 @@ const navItems = [
   { to: '/settings', label: 'App Settings', icon: Settings },
   { to: '/market-connection', label: 'Market Connection', icon: Wifi, section: 'market' },
   { to: '/competitor-sync', label: 'Competitor Sync', icon: Globe, section: 'market' },
+  { to: '/variant-seeds', label: 'Variant Seeds', icon: Dna, section: 'variant' },
+  { to: '/variant-crawl', label: 'Variant Crawl', icon: Microscope, section: 'variant' },
+  { to: '/variant-match', label: 'Match Rules', icon: GitMerge, section: 'variant' },
 ];
 
 export default function Layout() {
@@ -42,11 +45,17 @@ export default function Layout() {
         <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
           {navItems.map(({ to, label, icon: Icon, pulse, highlight, section }, idx) => {
             const isFirstMarket = section === 'market' && navItems[idx - 1]?.section !== 'market';
+            const isFirstVariant = section === 'variant' && navItems[idx - 1]?.section !== 'variant';
             return (
               <div key={to}>
                 {isFirstMarket && (
                   <div className="pt-2 pb-1 px-3">
                     <p className="text-[9px] font-bold text-sidebar-foreground/40 uppercase tracking-widest">Market Intel</p>
+                  </div>
+                )}
+                {isFirstVariant && (
+                  <div className="pt-2 pb-1 px-3">
+                    <p className="text-[9px] font-bold text-sidebar-foreground/40 uppercase tracking-widest">Variant Deep Crawl</p>
                   </div>
                 )}
                 <NavLink

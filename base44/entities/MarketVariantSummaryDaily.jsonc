@@ -1,0 +1,63 @@
+{
+  "name": "MarketVariantSummaryDaily",
+  "type": "object",
+  "properties": {
+    "sku": {
+      "type": "string"
+    },
+    "summary_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "variant_key": {
+      "type": "string"
+    },
+    "variant_display_name": {
+      "type": "string"
+    },
+    "normalized_weight": {
+      "type": "string"
+    },
+    "normalized_volume": {
+      "type": "string"
+    },
+    "normalized_pack_count": {
+      "type": "number"
+    },
+    "normalized_flavor": {
+      "type": "string"
+    },
+    "normalized_type": {
+      "type": "string"
+    },
+    "competitor_price_low": {
+      "type": "number"
+    },
+    "competitor_price_avg": {
+      "type": "number"
+    },
+    "competitor_price_high": {
+      "type": "number"
+    },
+    "competitor_count": {
+      "type": "number"
+    },
+    "strongest_competitor_price": {
+      "type": "number"
+    },
+    "strongest_competitor_shop": {
+      "type": "string"
+    },
+    "estimated_variant_units": {
+      "type": "number"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "sku",
+    "summary_date",
+    "variant_key"
+  ]
+}

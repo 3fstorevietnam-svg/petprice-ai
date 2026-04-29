@@ -93,6 +93,20 @@
     },
     "last_market_source": {
       "type": "string"
+    },
+    "market_variant_ready": {
+      "type": "boolean",
+      "default": false
+    },
+    "market_variant_last_sync_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "strongest_variant_competitor_price": {
+      "type": "number"
+    },
+    "strongest_variant_key": {
+      "type": "string"
     }
   },
   "required": [

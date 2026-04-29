@@ -1,0 +1,90 @@
+{
+  "name": "MarketVariantSnapshotRaw",
+  "type": "object",
+  "properties": {
+    "snapshot_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "sku": {
+      "type": "string"
+    },
+    "seed_product_link": {
+      "type": "string"
+    },
+    "parent_product_id": {
+      "type": "string"
+    },
+    "parent_product_name": {
+      "type": "string"
+    },
+    "competitor_shop_name": {
+      "type": "string"
+    },
+    "competitor_shop_link": {
+      "type": "string"
+    },
+    "competitor_product_link": {
+      "type": "string"
+    },
+    "competitor_product_id": {
+      "type": "string"
+    },
+    "variant_id": {
+      "type": "string"
+    },
+    "variant_name": {
+      "type": "string"
+    },
+    "variant_group_1": {
+      "type": "string"
+    },
+    "variant_group_2": {
+      "type": "string"
+    },
+    "normalized_weight": {
+      "type": "string"
+    },
+    "normalized_volume": {
+      "type": "string"
+    },
+    "normalized_pack_count": {
+      "type": "number"
+    },
+    "normalized_flavor": {
+      "type": "string"
+    },
+    "normalized_type": {
+      "type": "string"
+    },
+    "variant_price": {
+      "type": "number"
+    },
+    "variant_original_price": {
+      "type": "number"
+    },
+    "variant_stock": {
+      "type": "number"
+    },
+    "variant_sold_est": {
+      "type": "number"
+    },
+    "currency": {
+      "type": "string"
+    },
+    "image_url": {
+      "type": "string"
+    },
+    "raw_json": {
+      "type": "string"
+    },
+    "source_type": {
+      "type": "string"
+    },
+    "synced_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": []
+}

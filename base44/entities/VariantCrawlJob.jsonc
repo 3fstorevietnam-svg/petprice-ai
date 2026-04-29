@@ -1,0 +1,49 @@
+{
+  "name": "VariantCrawlJob",
+  "type": "object",
+  "properties": {
+    "job_type": {
+      "type": "string",
+      "enum": [
+        "queue_seed",
+        "crawl_variant_detail",
+        "webhook_receive",
+        "transform_variant_summary",
+        "full_variant_sync"
+      ]
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "running",
+        "success",
+        "failed"
+      ]
+    },
+    "source_name": {
+      "type": "string"
+    },
+    "records_processed": {
+      "type": "number",
+      "default": 0
+    },
+    "request_payload": {
+      "type": "string"
+    },
+    "response_summary": {
+      "type": "string"
+    },
+    "error_message": {
+      "type": "string"
+    }
+  },
+  "required": []
+}
