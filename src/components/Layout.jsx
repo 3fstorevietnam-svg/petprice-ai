@@ -7,11 +7,11 @@ import {
 import { cn } from '@/lib/utils';
 
 const navItems = [
+  { to: '/approval-queue', label: 'Approval Queue', icon: CheckSquare, highlight: true },
   { to: '/', label: 'Overview', icon: LayoutDashboard },
+  { to: '/ai-suggestions', label: 'AI Suggestions', icon: Brain, pulse: true },
   { to: '/products', label: 'Products', icon: Package },
   { to: '/daily-performance', label: 'Daily Performance', icon: BarChart3 },
-  { to: '/ai-suggestions', label: 'AI Suggestions', icon: Brain, pulse: true },
-  { to: '/approval-queue', label: 'Approval Queue', icon: CheckSquare },
   { to: '/combo-builder', label: 'Combo Builder', icon: Layers },
   { to: '/kill-list', label: 'SKU Kill List', icon: Skull },
   { to: '/performance', label: 'Performance', icon: TrendingUp },
@@ -38,7 +38,7 @@ export default function Layout() {
 
         {/* Nav */}
         <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-          {navItems.map(({ to, label, icon: Icon, pulse }) => (
+          {navItems.map(({ to, label, icon: Icon, pulse, highlight }) => (
             <NavLink
               key={to}
               to={to}
@@ -47,12 +47,15 @@ export default function Layout() {
                 'flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-150',
                 isActive
                   ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                  : 'text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground'
+                  : highlight
+                    ? 'text-orange-300 hover:bg-sidebar-accent/60 hover:text-orange-200'
+                    : 'text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground'
               )}
             >
               <Icon className="w-3.5 h-3.5 flex-shrink-0" />
               <span className="flex-1">{label}</span>
-              {pulse && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+              {highlight && <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />}
+              {pulse && !highlight && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
             </NavLink>
           ))}
         </nav>

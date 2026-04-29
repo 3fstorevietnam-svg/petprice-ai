@@ -145,10 +145,15 @@ export default function Dashboard() {
     <div className="flex flex-col h-full overflow-hidden">
       <PageHeader title="Overview Dashboard" subtitle="Operational summary — all SKUs"
         actions={
-          <Button onClick={runAI} disabled={running} className="gap-2 bg-primary hover:bg-primary/90 font-semibold">
-            {running ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-            {running ? 'Đang chạy AI...' : 'Run AI Suggestions Now'}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={runAI} disabled={running} className="gap-1.5 font-semibold text-sm">
+              {running ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              {running ? 'Đang chạy AI...' : 'Chạy AI'}
+            </Button>
+            <Button asChild className="gap-1.5 bg-primary hover:bg-primary/90 font-semibold text-sm">
+              <Link to="/approval-queue"><DollarSign className="w-4 h-4" />Approval Queue →</Link>
+            </Button>
+          </div>
         }
       />
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
@@ -188,7 +193,7 @@ export default function Dashboard() {
             title="🎯 Combo Opportunities"
             rows={comboOpps}
             colorClass="border-purple-200"
-            linkTo="/ai-suggestions"
+            linkTo="/approval-queue"
             emptyText="No combo suggestions pending."
             columns={[
               { key: 'sku', label: 'SKU', render: v => <span className="font-mono font-semibold text-purple-700">{v}</span> },
@@ -218,7 +223,7 @@ export default function Dashboard() {
             title="🛑 Stop Ads Candidates"
             rows={adsStop}
             colorClass="border-yellow-200"
-            linkTo="/ai-suggestions"
+            linkTo="/approval-queue"
             emptyText="No stop-ads candidates."
             columns={[
               { key: 'sku', label: 'SKU', render: v => <span className="font-mono font-semibold text-yellow-700">{v}</span> },
