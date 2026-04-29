@@ -128,7 +128,7 @@ export default function AISuggestions() {
   const generateSuggestions = async () => {
     setGenerating(true);
     try {
-      const res = await base44.functions.invoke('generateAISuggestions', {});
+      const res = await base44.functions.invoke('generatePricingSuggestions', {});
       toast.success(`Generated ${res.data?.created || 0} new suggestions`);
       load();
     } catch (e) {
