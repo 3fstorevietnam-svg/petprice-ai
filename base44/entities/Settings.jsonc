@@ -1,0 +1,45 @@
+{
+  "name": "Settings",
+  "type": "object",
+  "properties": {
+    "key": {
+      "type": "string",
+      "description": "Setting key (unique)"
+    },
+    "value": {
+      "type": "string",
+      "description": "Setting value (stored as string)"
+    },
+    "label": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "pricing",
+        "ads",
+        "ai",
+        "alerts",
+        "general"
+      ],
+      "default": "general"
+    },
+    "value_type": {
+      "type": "string",
+      "enum": [
+        "number",
+        "string",
+        "boolean",
+        "percentage"
+      ],
+      "default": "string"
+    }
+  },
+  "required": [
+    "key",
+    "value"
+  ]
+}

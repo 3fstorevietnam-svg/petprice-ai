@@ -1,0 +1,111 @@
+{
+  "name": "AISuggestion",
+  "type": "object",
+  "properties": {
+    "product_id": {
+      "type": "string",
+      "description": "Reference to Product"
+    },
+    "sku_code": {
+      "type": "string"
+    },
+    "product_name": {
+      "type": "string"
+    },
+    "suggestion_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "GIU_GIA",
+        "TANG_GIA",
+        "GIAM_GIA",
+        "GOM_COMBO",
+        "KILL_SKU",
+        "CHAY_ADS",
+        "NGUNG_ADS"
+      ],
+      "description": "Recommended action"
+    },
+    "current_price": {
+      "type": "number"
+    },
+    "suggested_price": {
+      "type": "number",
+      "description": "New price if applicable"
+    },
+    "price_delta": {
+      "type": "number",
+      "description": "Price change amount"
+    },
+    "price_delta_pct": {
+      "type": "number",
+      "description": "Price change %"
+    },
+    "confidence_score": {
+      "type": "number",
+      "description": "AI confidence 0-100"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "critical",
+        "high",
+        "medium",
+        "low"
+      ],
+      "default": "medium"
+    },
+    "reasoning": {
+      "type": "string",
+      "description": "AI explanation for the suggestion"
+    },
+    "signals": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Key signals that triggered this"
+    },
+    "expected_profit_impact": {
+      "type": "number",
+      "description": "Expected profit change"
+    },
+    "expected_order_impact": {
+      "type": "number",
+      "description": "Expected order volume change"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "approved",
+        "rejected",
+        "applied",
+        "expired"
+      ],
+      "default": "pending"
+    },
+    "reviewed_by": {
+      "type": "string"
+    },
+    "reviewed_at": {
+      "type": "string"
+    },
+    "admin_note": {
+      "type": "string"
+    },
+    "expires_at": {
+      "type": "string",
+      "description": "Suggestion expiry datetime"
+    }
+  },
+  "required": [
+    "product_id",
+    "sku_code",
+    "action",
+    "suggestion_date"
+  ]
+}

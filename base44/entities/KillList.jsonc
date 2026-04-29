@@ -1,0 +1,79 @@
+{
+  "name": "KillList",
+  "type": "object",
+  "properties": {
+    "product_id": {
+      "type": "string"
+    },
+    "sku_code": {
+      "type": "string"
+    },
+    "product_name": {
+      "type": "string"
+    },
+    "kill_reason": {
+      "type": "string",
+      "enum": [
+        "no_profit",
+        "dead_stock",
+        "supplier_discontinued",
+        "strategy_change",
+        "high_return_rate",
+        "ai_recommended"
+      ],
+      "description": "Reason for killing SKU"
+    },
+    "kill_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "last_order_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "remaining_stock": {
+      "type": "number"
+    },
+    "stock_value": {
+      "type": "number",
+      "description": "Remaining stock cost value"
+    },
+    "days_without_order": {
+      "type": "number"
+    },
+    "avg_margin_last_30d": {
+      "type": "number"
+    },
+    "total_loss": {
+      "type": "number"
+    },
+    "liquidation_price": {
+      "type": "number",
+      "description": "Suggested liquidation price"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "recommended",
+        "approved",
+        "liquidating",
+        "killed"
+      ],
+      "default": "recommended"
+    },
+    "approved_by": {
+      "type": "string"
+    },
+    "approved_at": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "product_id",
+    "sku_code",
+    "kill_reason"
+  ]
+}

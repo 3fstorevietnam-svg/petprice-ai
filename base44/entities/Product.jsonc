@@ -1,0 +1,93 @@
+{
+  "name": "Product",
+  "type": "object",
+  "properties": {
+    "sku_id": {
+      "type": "string",
+      "description": "Shopee SKU ID"
+    },
+    "sku_code": {
+      "type": "string",
+      "description": "Internal SKU code"
+    },
+    "product_name": {
+      "type": "string",
+      "description": "Product name"
+    },
+    "category": {
+      "type": "string",
+      "description": "Product category"
+    },
+    "brand": {
+      "type": "string",
+      "description": "Brand name"
+    },
+    "cost_price": {
+      "type": "number",
+      "description": "Cost price (COGS)"
+    },
+    "current_price": {
+      "type": "number",
+      "description": "Current selling price on Shopee"
+    },
+    "min_price": {
+      "type": "number",
+      "description": "Minimum allowed price (floor)"
+    },
+    "max_price": {
+      "type": "number",
+      "description": "Maximum allowed price (ceiling)"
+    },
+    "target_margin_pct": {
+      "type": "number",
+      "description": "Target gross margin %"
+    },
+    "shopee_fee_pct": {
+      "type": "number",
+      "description": "Shopee platform fee %"
+    },
+    "shipping_cost": {
+      "type": "number",
+      "description": "Average shipping cost per order"
+    },
+    "stock_quantity": {
+      "type": "number",
+      "description": "Current stock level"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "inactive",
+        "killed",
+        "combo_only"
+      ],
+      "default": "active"
+    },
+    "image_url": {
+      "type": "string",
+      "description": "Product image URL"
+    },
+    "shopee_url": {
+      "type": "string",
+      "description": "Shopee product link"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Internal tags"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Admin notes"
+    }
+  },
+  "required": [
+    "sku_code",
+    "product_name",
+    "cost_price",
+    "current_price"
+  ]
+}

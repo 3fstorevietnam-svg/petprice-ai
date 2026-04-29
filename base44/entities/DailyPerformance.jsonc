@@ -1,0 +1,92 @@
+{
+  "name": "DailyPerformance",
+  "type": "object",
+  "properties": {
+    "product_id": {
+      "type": "string",
+      "description": "Reference to Product"
+    },
+    "sku_code": {
+      "type": "string"
+    },
+    "date": {
+      "type": "string",
+      "format": "date"
+    },
+    "orders": {
+      "type": "number",
+      "description": "Number of orders"
+    },
+    "units_sold": {
+      "type": "number"
+    },
+    "revenue": {
+      "type": "number",
+      "description": "Gross revenue"
+    },
+    "cogs": {
+      "type": "number",
+      "description": "Cost of goods sold"
+    },
+    "shopee_fees": {
+      "type": "number"
+    },
+    "ads_spend": {
+      "type": "number",
+      "description": "Ads spend for the day"
+    },
+    "shipping_cost_total": {
+      "type": "number"
+    },
+    "gross_profit": {
+      "type": "number"
+    },
+    "net_profit": {
+      "type": "number"
+    },
+    "margin_pct": {
+      "type": "number",
+      "description": "Net margin %"
+    },
+    "roas": {
+      "type": "number",
+      "description": "Return on Ad Spend"
+    },
+    "conversion_rate": {
+      "type": "number",
+      "description": "Conversion rate %"
+    },
+    "views": {
+      "type": "number",
+      "description": "Product page views"
+    },
+    "clicks": {
+      "type": "number"
+    },
+    "cart_adds": {
+      "type": "number"
+    },
+    "avg_selling_price": {
+      "type": "number"
+    },
+    "returns": {
+      "type": "number",
+      "description": "Number of returns/refunds"
+    },
+    "ranking_position": {
+      "type": "number",
+      "description": "Search ranking position"
+    },
+    "rating": {
+      "type": "number"
+    },
+    "review_count": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "product_id",
+    "sku_code",
+    "date"
+  ]
+}
