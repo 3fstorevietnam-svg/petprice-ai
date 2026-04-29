@@ -1,0 +1,38 @@
+{
+  "name": "PriceTestLog",
+  "type": "object",
+  "properties": {
+    "sku": {
+      "type": "string"
+    },
+    "test_start_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "test_end_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "old_price": {
+      "type": "number"
+    },
+    "test_price": {
+      "type": "number"
+    },
+    "result_note": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "planned",
+        "running",
+        "completed",
+        "cancelled"
+      ]
+    }
+  },
+  "required": [
+    "sku"
+  ]
+}

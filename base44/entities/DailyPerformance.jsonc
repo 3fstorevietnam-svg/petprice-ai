@@ -2,91 +2,64 @@
   "name": "DailyPerformance",
   "type": "object",
   "properties": {
-    "product_id": {
-      "type": "string",
-      "description": "Reference to Product"
-    },
-    "sku_code": {
+    "sku": {
       "type": "string"
     },
     "date": {
       "type": "string",
       "format": "date"
     },
+    "views": {
+      "type": "number",
+      "default": 0
+    },
+    "clicks": {
+      "type": "number",
+      "default": 0
+    },
     "orders": {
       "type": "number",
-      "description": "Number of orders"
-    },
-    "units_sold": {
-      "type": "number"
+      "default": 0
     },
     "revenue": {
       "type": "number",
-      "description": "Gross revenue"
-    },
-    "cogs": {
-      "type": "number",
-      "description": "Cost of goods sold"
-    },
-    "shopee_fees": {
-      "type": "number"
+      "default": 0
     },
     "ads_spend": {
       "type": "number",
-      "description": "Ads spend for the day"
+      "default": 0
     },
-    "shipping_cost_total": {
-      "type": "number"
-    },
-    "gross_profit": {
-      "type": "number"
-    },
-    "net_profit": {
-      "type": "number"
-    },
-    "margin_pct": {
+    "units_sold": {
       "type": "number",
-      "description": "Net margin %"
-    },
-    "roas": {
-      "type": "number",
-      "description": "Return on Ad Spend"
+      "default": 0
     },
     "conversion_rate": {
       "type": "number",
-      "description": "Conversion rate %"
+      "default": 0
     },
-    "views": {
+    "current_rank": {
       "type": "number",
-      "description": "Product page views"
+      "default": 0
     },
-    "clicks": {
-      "type": "number"
-    },
-    "cart_adds": {
-      "type": "number"
-    },
-    "avg_selling_price": {
-      "type": "number"
-    },
-    "returns": {
+    "competitor_price": {
       "type": "number",
-      "description": "Number of returns/refunds"
+      "default": 0
     },
-    "ranking_position": {
+    "orders_7d": {
       "type": "number",
-      "description": "Search ranking position"
+      "default": 0
     },
-    "rating": {
-      "type": "number"
+    "orders_30d": {
+      "type": "number",
+      "default": 0
     },
-    "review_count": {
-      "type": "number"
+    "views_7d": {
+      "type": "number",
+      "default": 0
     }
   },
   "required": [
-    "product_id",
-    "sku_code",
+    "sku",
     "date"
   ]
 }

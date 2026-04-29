@@ -2,80 +2,52 @@
   "name": "AISuggestion",
   "type": "object",
   "properties": {
-    "product_id": {
-      "type": "string",
-      "description": "Reference to Product"
-    },
-    "sku_code": {
+    "sku": {
       "type": "string"
     },
-    "product_name": {
-      "type": "string"
-    },
-    "suggestion_date": {
+    "rec_date": {
       "type": "string",
       "format": "date"
     },
-    "action": {
+    "current_price": {
+      "type": "number"
+    },
+    "current_profit": {
+      "type": "number"
+    },
+    "current_margin": {
+      "type": "number"
+    },
+    "suggested_action": {
       "type": "string",
       "enum": [
         "GIU_GIA",
         "TANG_GIA",
         "GIAM_GIA",
         "GOM_COMBO",
-        "KILL_SKU",
-        "CHAY_ADS",
-        "NGUNG_ADS"
-      ],
-      "description": "Recommended action"
-    },
-    "current_price": {
-      "type": "number"
+        "KILL_SKU"
+      ]
     },
     "suggested_price": {
-      "type": "number",
-      "description": "New price if applicable"
+      "type": "number"
     },
-    "price_delta": {
-      "type": "number",
-      "description": "Price change amount"
+    "suggested_combo_qty": {
+      "type": "number"
     },
-    "price_delta_pct": {
-      "type": "number",
-      "description": "Price change %"
-    },
-    "confidence_score": {
-      "type": "number",
-      "description": "AI confidence 0-100"
-    },
-    "priority": {
+    "ads_action": {
       "type": "string",
       "enum": [
-        "critical",
-        "high",
-        "medium",
-        "low"
-      ],
-      "default": "medium"
+        "GIU_NGUYEN",
+        "CHAY_ADS",
+        "NGUNG_ADS",
+        "TEST_LAI_GIA_VA_CONTENT"
+      ]
     },
-    "reasoning": {
-      "type": "string",
-      "description": "AI explanation for the suggestion"
+    "reason": {
+      "type": "string"
     },
-    "signals": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "description": "Key signals that triggered this"
-    },
-    "expected_profit_impact": {
-      "type": "number",
-      "description": "Expected profit change"
-    },
-    "expected_order_impact": {
-      "type": "number",
-      "description": "Expected order volume change"
+    "confidence": {
+      "type": "number"
     },
     "status": {
       "type": "string",
@@ -83,29 +55,16 @@
         "pending",
         "approved",
         "rejected",
-        "applied",
-        "expired"
+        "testing"
       ],
       "default": "pending"
     },
-    "reviewed_by": {
-      "type": "string"
-    },
-    "reviewed_at": {
-      "type": "string"
-    },
     "admin_note": {
       "type": "string"
-    },
-    "expires_at": {
-      "type": "string",
-      "description": "Suggestion expiry datetime"
     }
   },
   "required": [
-    "product_id",
-    "sku_code",
-    "action",
-    "suggestion_date"
+    "sku",
+    "rec_date"
   ]
 }

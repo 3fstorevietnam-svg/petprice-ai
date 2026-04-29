@@ -1,227 +1,168 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import PageHeader from '@/components/PageHeader';
+import DataTable from '@/components/admin/DataTable';
+import FormDialog from '@/components/admin/FormDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Plus, Search, Package, Edit2, ExternalLink } from 'lucide-react';
+import { Plus, Package, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 const STATUS_COLORS = {
   active: 'bg-emerald-100 text-emerald-800',
-  inactive: 'bg-gray-100 text-gray-600',
+  paused: 'bg-yellow-100 text-yellow-800',
   killed: 'bg-red-100 text-red-700',
-  combo_only: 'bg-purple-100 text-purple-800',
 };
 
-const emptyProduct = {
-  sku_code: '', product_name: '', category: '', brand: '',
-  cost_price: '', current_price: '', min_price: '', max_price: '',
-  target_margin_pct: '', shopee_fee_pct: '', shipping_cost: '',
-  stock_quantity: '', status: 'active', shopee_url: '', notes: ''
+const ROLE_COLORS = {
+  moi: 'bg-purple-100 text-purple-800',
+  core: 'bg-blue-100 text-blue-800',
+  upsell: 'bg-orange-100 text-orange-800',
 };
+
+const FIELDS = [
+  { key: 'sku', label: 'SKU', required: true, placeholder: 'e.g. PET-001' },
+  { key: 'name', label: 'Product Name', required: true, placeholder: 'Product name', fullWidth: true },
+  { key: 'category', label: 'Category', placeholder: 'e.g. Dog Food' },
+  { key: 'sku_role', label: 'SKU Role', type: 'select', options: [{ value: 'moi', label: 'Mới (New)' }, { value: 'core', label: 'Core' }, { value: 'upsell', label: 'Upsell' }] },
+  { key: 'status', label: 'Status', type: 'select', options: [{ value: 'active', label: 'Active' }, { value: 'paused', label: 'Paused' }, { value: 'killed', label: 'Killed' }] },
+  { key: 'cost', label: 'Cost (₫)', type: 'number', placeholder: '0' },
+  { key: 'current_price', label: 'Current Price (₫)', type: 'number', placeholder: '0' },
+  { key: 'min_price', label: 'Min Price (₫)', type: 'number', placeholder: '0' },
+  { key: 'max_price', label: 'Max Price (₫)', type: 'number', placeholder: '0' },
+  { key: 'shopee_fee_rate', label: 'Shopee Fee Rate', type: 'number', step: '0.01', placeholder: '0.22' },
+  { key: 'ops_fee', label: 'Ops Fee (₫)', type: 'number', placeholder: '3000' },
+  { key: 'packing_fee', label: 'Packing Fee (₫)', type: 'number', placeholder: '11000' },
+  { key: 'fixed_fee', label: 'Fixed Fee (₫)', type: 'number', placeholder: '1833' },
+  { key: 'combo_qty', label: 'Combo Qty', type: 'number', placeholder: '1' },
+  { key: 'notes', label: 'Notes', type: 'textarea', fullWidth: true },
+];
+
+const DEFAULTS = { sku: '', name: '', category: '', cost: 0, current_price: 0, shopee_fee_rate: 0.22, ops_fee: 3000, packing_fee: 11000, fixed_fee: 1833, sku_role: 'core', combo_qty: 1, min_price: 0, max_price: '', status: 'active', notes: '' };
+
+function calcProfit(p) {
+  if (!p.current_price || !p.cost) return null;
+  const price = parseFloat(p.current_price);
+  const fee = price * parseFloat(p.shopee_fee_rate || 0.22);
+  return price - parseFloat(p.cost) - fee - parseFloat(p.ops_fee || 3000) - parseFloat(p.packing_fee || 11000) - parseFloat(p.fixed_fee || 1833);
+}
+
+function calcMargin(p) {
+  if (!p.current_price) return null;
+  const profit = calcProfit(p);
+  if (profit === null) return null;
+  return (profit / parseFloat(p.current_price)) * 100;
+}
 
 export default function Products() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [showDialog, setShowDialog] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState(DEFAULTS);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState(emptyProduct);
   const [saving, setSaving] = useState(false);
 
-  const load = async () => {
+  const load = () => {
     setLoading(true);
-    const data = await base44.entities.Product.list('-created_date', 100);
-    setProducts(data);
-    setLoading(false);
+    base44.entities.Product.list('-created_date', 200).then(d => { setProducts(d); setLoading(false); });
   };
 
   useEffect(() => { load(); }, []);
 
-  const openCreate = () => { setEditing(null); setForm(emptyProduct); setShowDialog(true); };
-  const openEdit = (p) => { setEditing(p); setForm({ ...p }); setShowDialog(true); };
+  const openCreate = () => { setEditing(null); setForm(DEFAULTS); setOpen(true); };
+  const openEdit = (row) => { setEditing(row); setForm({ ...row }); setOpen(true); };
+  const onChange = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
   const handleSave = async () => {
+    if (!form.sku || !form.name) { toast.error('SKU and Name are required'); return; }
     setSaving(true);
-    const payload = { ...form,
-      cost_price: parseFloat(form.cost_price) || 0,
-      current_price: parseFloat(form.current_price) || 0,
-      min_price: parseFloat(form.min_price) || 0,
-      max_price: parseFloat(form.max_price) || 0,
-      target_margin_pct: parseFloat(form.target_margin_pct) || 0,
-      shopee_fee_pct: parseFloat(form.shopee_fee_pct) || 0,
-      shipping_cost: parseFloat(form.shipping_cost) || 0,
-      stock_quantity: parseInt(form.stock_quantity) || 0,
-    };
+    const payload = { ...form, cost: parseFloat(form.cost) || 0, current_price: parseFloat(form.current_price) || 0, min_price: parseFloat(form.min_price) || 0, max_price: parseFloat(form.max_price) || undefined, shopee_fee_rate: parseFloat(form.shopee_fee_rate) || 0.22, ops_fee: parseFloat(form.ops_fee) || 3000, packing_fee: parseFloat(form.packing_fee) || 11000, fixed_fee: parseFloat(form.fixed_fee) || 1833, combo_qty: parseInt(form.combo_qty) || 1 };
     if (editing) await base44.entities.Product.update(editing.id, payload);
     else await base44.entities.Product.create(payload);
-    setShowDialog(false);
+    toast.success(editing ? 'Product updated' : 'Product created');
+    setOpen(false);
     load();
     setSaving(false);
   };
 
+  const handleDelete = async () => {
+    await base44.entities.Product.delete(editing.id);
+    toast.success('Product deleted');
+    setOpen(false);
+    load();
+  };
+
   const filtered = products.filter(p => {
-    const matchSearch = !search || p.product_name?.toLowerCase().includes(search.toLowerCase()) || p.sku_code?.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === 'all' || p.status === statusFilter;
-    return matchSearch && matchStatus;
+    const s = search.toLowerCase();
+    return (!s || p.sku?.toLowerCase().includes(s) || p.name?.toLowerCase().includes(s)) &&
+      (statusFilter === 'all' || p.status === statusFilter);
   });
 
-  const margin = (p) => {
-    if (!p.current_price || !p.cost_price) return null;
-    const gross = p.current_price - p.cost_price - (p.current_price * (p.shopee_fee_pct || 0) / 100) - (p.shipping_cost || 0);
-    return ((gross / p.current_price) * 100).toFixed(1);
-  };
+  const columns = [
+    { key: 'sku', label: 'SKU', render: (v) => <span className="font-mono text-xs font-medium">{v}</span> },
+    { key: 'name', label: 'Product Name', render: (v, row) => (
+      <div>
+        <p className="font-medium text-sm">{v}</p>
+        {row.category && <p className="text-xs text-muted-foreground">{row.category}</p>}
+      </div>
+    )},
+    { key: 'sku_role', label: 'Role', render: (v) => v ? <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full', ROLE_COLORS[v])}>{v}</span> : '—' },
+    { key: 'cost', label: 'Cost', render: (v) => v ? <span className="font-mono text-xs">₫{parseFloat(v).toLocaleString()}</span> : '—' },
+    { key: 'current_price', label: 'Price', render: (v) => <span className="font-mono text-sm font-semibold">₫{parseFloat(v || 0).toLocaleString()}</span> },
+    { key: 'id', label: 'Profit/Margin', render: (_, row) => {
+      const profit = calcProfit(row);
+      const margin = calcMargin(row);
+      if (profit === null) return '—';
+      return (
+        <div>
+          <p className={cn('font-mono text-xs font-semibold', profit >= 0 ? 'text-emerald-600' : 'text-red-500')}>₫{profit.toLocaleString('vi-VN', { maximumFractionDigits: 0 })}</p>
+          <p className={cn('text-xs', margin >= 15 ? 'text-emerald-600' : margin >= 0 ? 'text-yellow-600' : 'text-red-500')}>{margin.toFixed(1)}%</p>
+        </div>
+      );
+    }},
+    { key: 'combo_qty', label: 'Combo Qty', render: (v) => <span className="text-xs">{v || 1}</span> },
+    { key: 'status', label: 'Status', render: (v) => <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full', STATUS_COLORS[v] || 'bg-muted text-muted-foreground')}>{v}</span> },
+  ];
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <PageHeader
         title="Products"
-        subtitle={`${products.length} SKUs total`}
-        actions={
-          <Button size="sm" onClick={openCreate}><Plus className="w-4 h-4 mr-1.5" />Add SKU</Button>
-        }
+        subtitle={`${products.length} SKUs`}
+        actions={<Button size="sm" onClick={openCreate}><Plus className="w-4 h-4 mr-1.5" />Add SKU</Button>}
       />
 
-      <div className="flex-1 overflow-y-auto">
-        {/* Filters */}
-        <div className="px-6 py-3 border-b border-border bg-card/30 flex items-center gap-3">
-          <div className="relative flex-1 max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="Search SKU or name..." className="pl-9 h-8 text-sm" value={search} onChange={e => setSearch(e.target.value)} />
-          </div>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-32 h-8 text-sm"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="inactive">Inactive</SelectItem>
-              <SelectItem value="killed">Killed</SelectItem>
-              <SelectItem value="combo_only">Combo Only</SelectItem>
-            </SelectContent>
-          </Select>
+      <div className="flex items-center gap-3 px-5 py-3 border-b border-border bg-card/30 flex-shrink-0">
+        <div className="relative max-w-xs flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input placeholder="Search SKU or name..." className="pl-9 h-8 text-sm" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
-
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/30">
-                {['SKU Code', 'Product Name', 'Cost', 'Price', 'Margin', 'Stock', 'Status', ''].map(h => (
-                  <th key={h} className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {loading ? (
-                Array(8).fill(0).map((_, i) => (
-                  <tr key={i}>
-                    {Array(8).fill(0).map((_, j) => (
-                      <td key={j} className="px-5 py-4"><div className="h-4 bg-muted rounded animate-pulse" /></td>
-                    ))}
-                  </tr>
-                ))
-              ) : filtered.length === 0 ? (
-                <tr><td colSpan={8} className="px-5 py-16 text-center text-muted-foreground">
-                  <Package className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                  No products found. Add your first SKU.
-                </td></tr>
-              ) : (
-                filtered.map(p => {
-                  const m = margin(p);
-                  return (
-                    <tr key={p.id} className="hover:bg-muted/20 transition-colors">
-                      <td className="px-5 py-3.5 font-mono text-xs text-muted-foreground">{p.sku_code}</td>
-                      <td className="px-5 py-3.5">
-                        <div>
-                          <p className="font-medium text-foreground">{p.product_name}</p>
-                          {p.brand && <p className="text-xs text-muted-foreground">{p.brand}</p>}
-                        </div>
-                      </td>
-                      <td className="px-5 py-3.5 font-mono text-xs">{p.cost_price ? `₫${p.cost_price.toLocaleString()}` : '—'}</td>
-                      <td className="px-5 py-3.5 font-mono text-sm font-semibold">{p.current_price ? `₫${p.current_price.toLocaleString()}` : '—'}</td>
-                      <td className="px-5 py-3.5">
-                        {m !== null ? (
-                          <span className={cn('font-semibold text-xs', parseFloat(m) >= 0 ? 'text-emerald-600' : 'text-red-500')}>{m}%</span>
-                        ) : '—'}
-                      </td>
-                      <td className="px-5 py-3.5 text-sm">{p.stock_quantity ?? '—'}</td>
-                      <td className="px-5 py-3.5">
-                        <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full', STATUS_COLORS[p.status] || 'bg-muted text-muted-foreground')}>
-                          {p.status}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(p)}>
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </Button>
-                          {p.shopee_url && (
-                            <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
-                              <a href={p.shopee_url} target="_blank" rel="noopener noreferrer"><ExternalLink className="w-3.5 h-3.5" /></a>
-                            </Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-32 h-8 text-sm"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="paused">Paused</SelectItem>
+            <SelectItem value="killed">Killed</SelectItem>
+          </SelectContent>
+        </Select>
+        <span className="text-xs text-muted-foreground ml-auto">{filtered.length} shown</span>
       </div>
 
-      {/* Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Edit Product' : 'Add New SKU'}</DialogTitle>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-4 py-2">
-            {[
-              { key: 'sku_code', label: 'SKU Code', required: true },
-              { key: 'product_name', label: 'Product Name', required: true },
-              { key: 'brand', label: 'Brand' },
-              { key: 'category', label: 'Category' },
-              { key: 'cost_price', label: 'Cost Price (₫)', type: 'number' },
-              { key: 'current_price', label: 'Selling Price (₫)', type: 'number' },
-              { key: 'min_price', label: 'Min Price (₫)', type: 'number' },
-              { key: 'max_price', label: 'Max Price (₫)', type: 'number' },
-              { key: 'target_margin_pct', label: 'Target Margin %', type: 'number' },
-              { key: 'shopee_fee_pct', label: 'Shopee Fee %', type: 'number' },
-              { key: 'shipping_cost', label: 'Avg Shipping Cost (₫)', type: 'number' },
-              { key: 'stock_quantity', label: 'Stock Qty', type: 'number' },
-              { key: 'shopee_url', label: 'Shopee URL' },
-            ].map(({ key, label, type, required }) => (
-              <div key={key} className={key === 'shopee_url' ? 'col-span-2' : ''}>
-                <Label className="text-xs mb-1.5 block">{label}{required && ' *'}</Label>
-                <Input type={type || 'text'} value={form[key] || ''} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} className="h-8 text-sm" />
-              </div>
-            ))}
-            <div>
-              <Label className="text-xs mb-1.5 block">Status</Label>
-              <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v }))}>
-                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="inactive">Inactive</SelectItem>
-                  <SelectItem value="killed">Killed</SelectItem>
-                  <SelectItem value="combo_only">Combo Only</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
-            <Button onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <div className="flex-1 overflow-y-auto">
+        <DataTable columns={columns} data={filtered} loading={loading} emptyIcon={Package} emptyText="No products yet. Add your first SKU." onRowClick={openEdit} />
+      </div>
+
+      <FormDialog
+        open={open} onOpenChange={setOpen} title="Product"
+        fields={FIELDS} form={form} onChange={onChange}
+        onSave={handleSave} onDelete={editing ? handleDelete : undefined}
+        saving={saving} editing={editing}
+      />
     </div>
   );
 }

@@ -14,7 +14,8 @@ import ApprovalQueue from '@/pages/ApprovalQueue';
 import ComboBuilder from '@/pages/ComboBuilder';
 import KillList from '@/pages/KillList';
 import PerformanceTracking from '@/pages/PerformanceTracking';
-import SettingsPage from '@/pages/SettingsPage';
+import PriceTestLog from '@/pages/PriceTestLog';
+import AppSettingsPage from '@/pages/AppSettingsPage';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -46,7 +47,8 @@ const AuthenticatedApp = () => {
         <Route path="/combo-builder" element={<ComboBuilder />} />
         <Route path="/kill-list" element={<KillList />} />
         <Route path="/performance" element={<PerformanceTracking />} />
-        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/price-test-log" element={<PriceTestLog />} />
+        <Route path="/settings" element={<AppSettingsPage />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
