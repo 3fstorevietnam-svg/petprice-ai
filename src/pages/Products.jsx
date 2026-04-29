@@ -36,7 +36,8 @@ function calcProfit(p) {
   const price = parseFloat(p.current_price) || 0;
   const cost = parseFloat(p.cost) || 0;
   if (!price) return null;
-  return price - cost - price * parseFloat(p.shopee_fee_rate || 0.22) - parseFloat(p.ops_fee || 3000) - parseFloat(p.packing_fee || 11000) - parseFloat(p.fixed_fee || 1833);
+  const feeRate = parseFloat(p.shopee_fee_rate) || 0.22;
+  return price * (1 - feeRate) - cost - 15833;
 }
 function calcMargin(p) {
   const profit = calcProfit(p);

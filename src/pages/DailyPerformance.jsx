@@ -31,7 +31,7 @@ const FIELDS = [
 export default function DailyPerformance() {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [dateFilter, setDateFilter] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [dateFilter, setDateFilter] = useState('');
   const [skuSearch, setSkuSearch] = useState('');
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(DEFAULTS);
@@ -85,7 +85,10 @@ export default function DailyPerformance() {
     { key: 'units_sold', label: 'Units', render: v => <span className="text-xs">{v || 0}</span> },
     { key: 'views', label: 'Views', render: v => <span className="text-xs">{(v || 0).toLocaleString()}</span> },
     { key: 'clicks', label: 'Clicks', render: v => <span className="text-xs">{(v || 0).toLocaleString()}</span> },
-    { key: 'conversion_rate', label: 'CVR', render: v => <span className={cn('text-xs font-semibold', (v || 0) >= 3 ? 'text-emerald-600' : (v || 0) >= 1 ? 'text-yellow-600' : 'text-red-500')}>{(v || 0).toFixed(1)}%</span> },
+    { key: 'conversion_rate', label: 'CVR', render: v => {
+      const pct = (parseFloat(v) || 0) * 100;
+      return <span className={cn('text-xs font-semibold', pct >= 3 ? 'text-emerald-600' : pct >= 1 ? 'text-yellow-600' : 'text-red-500')}>{pct.toFixed(2)}%</span>;
+    }},
     { key: 'current_rank', label: 'Rank', render: v => <span className={cn('text-xs font-medium', (v || 0) <= 10 && (v || 0) > 0 ? 'text-emerald-600 font-bold' : '')}>{v || '—'}</span> },
     { key: 'competitor_price', label: 'Comp. Price', render: v => v ? <span className="font-mono text-xs text-muted-foreground">₫{parseFloat(v).toLocaleString()}</span> : '—' },
     { key: 'orders_7d', label: '7d Orders', render: v => <span className="text-xs font-medium">{v || 0}</span> },

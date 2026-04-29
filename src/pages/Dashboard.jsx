@@ -113,7 +113,10 @@ export default function Dashboard() {
   function calcProfit(p) {
     if (!p?.current_price || !p?.cost) return null;
     const price = parseFloat(p.current_price);
-    return price - parseFloat(p.cost) - price * parseFloat(p.shopee_fee_rate || 0.22) - parseFloat(p.ops_fee || 3000) - parseFloat(p.packing_fee || 11000) - parseFloat(p.fixed_fee || 1833);
+    const cost = parseFloat(p.cost);
+    const feeRate = parseFloat(p.shopee_fee_rate) || 0.22;
+    const FIXED_COST = 15833;
+    return price * (1 - feeRate) - cost - FIXED_COST;
   }
 
   const activeProducts = products.filter(p => p.status === 'active');

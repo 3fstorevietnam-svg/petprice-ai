@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
 
       const result = calcComboMetrics({
         unitCost: product.cost,
-        comboQty: combo_qty || product.combo_qty,
+        comboQty: combo_qty || null, // always recalculate unless explicitly passed
         comboPrice: combo_price,
         feeRate: product.shopee_fee_rate || DEFAULT_FEE_RATE,
         targetMargin: target_margin || 0.07,
