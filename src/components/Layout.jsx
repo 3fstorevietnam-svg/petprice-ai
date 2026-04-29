@@ -2,7 +2,7 @@ import { Outlet, NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Package, BarChart3, Brain,
   CheckSquare, Layers, Skull, TrendingUp, Settings,
-  TestTube, Zap, Globe, Wifi, Dna, Microscope, GitMerge
+  TestTube, Zap, Globe, Wifi, Dna, Microscope, GitMerge, Wrench
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -22,6 +22,7 @@ const navItems = [
   { to: '/variant-seeds', label: 'Variant Seeds', icon: Dna, section: 'variant' },
   { to: '/variant-crawl', label: 'Variant Crawl', icon: Microscope, section: 'variant' },
   { to: '/variant-match', label: 'Match Rules', icon: GitMerge, section: 'variant' },
+  { to: '/apify-variant-builder', label: 'Apify Input Builder', icon: Wrench, section: 'tools' },
 ];
 
 export default function Layout() {
@@ -46,6 +47,7 @@ export default function Layout() {
           {navItems.map(({ to, label, icon: Icon, pulse, highlight, section }, idx) => {
             const isFirstMarket = section === 'market' && navItems[idx - 1]?.section !== 'market';
             const isFirstVariant = section === 'variant' && navItems[idx - 1]?.section !== 'variant';
+            const isFirstTools = section === 'tools' && navItems[idx - 1]?.section !== 'tools';
             return (
               <div key={to}>
                 {isFirstMarket && (
@@ -56,6 +58,11 @@ export default function Layout() {
                 {isFirstVariant && (
                   <div className="pt-2 pb-1 px-3">
                     <p className="text-[9px] font-bold text-sidebar-foreground/40 uppercase tracking-widest">Variant Deep Crawl</p>
+                  </div>
+                )}
+                {isFirstTools && (
+                  <div className="pt-2 pb-1 px-3">
+                    <p className="text-[9px] font-bold text-sidebar-foreground/40 uppercase tracking-widest">Data Tools</p>
                   </div>
                 )}
                 <NavLink

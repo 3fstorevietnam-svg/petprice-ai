@@ -21,6 +21,7 @@ import CompetitorSyncCenter from '@/pages/CompetitorSyncCenter';
 import VariantSeedManager from '@/pages/VariantSeedManager';
 import VariantCrawlCenter from '@/pages/VariantCrawlCenter';
 import VariantMatchRules from '@/pages/VariantMatchRules';
+import ApifyVariantInputBuilder from '@/pages/ApifyVariantInputBuilder';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -59,6 +60,7 @@ const AuthenticatedApp = () => {
         <Route path="/variant-seeds" element={<VariantSeedManager />} />
         <Route path="/variant-crawl" element={<VariantCrawlCenter />} />
         <Route path="/variant-match" element={<VariantMatchRules />} />
+        <Route path="/apify-variant-builder" element={<ApifyVariantInputBuilder />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
