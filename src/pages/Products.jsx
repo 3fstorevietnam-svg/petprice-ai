@@ -93,12 +93,25 @@ export default function Products() {
   const [deleteTarget, setDeleteTarget] = useState(null); // product object to delete
   const [deleting, setDeleting] = useState(false);
 
-  const load = () => {
+  const load = async () => {
     setLoading(true);
-    Promise.all([
-      base44.entities.Product.list('-created_date', 300),
-      base44.entities.AISuggestion.filter({ status: 'pending' }, '-rec_date', 300),
-    ]).then(([p, s]) => { setProducts(p); setSuggestions(s); setLoading(false); });
+    try {
+      const pageSize = 500;
+      let offset = 0;
+      const all = [];
+      while (true) {
+        const page = await base44.entities.Product.list('-created_date', pageSize, offset);
+        if (!Array.isArray(page) || page.length === 0) break;
+        all.push(...page);
+        if (page.length < pageSize) break;
+        offset += pageSize;
+      }
+      const s = await base44.entities.AISuggestion.filter({ status: 'pending' }, '-rec_date', 2000);
+      setProducts(all);
+      setSuggestions(s);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, []);
