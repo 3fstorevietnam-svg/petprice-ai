@@ -4,8 +4,9 @@ import PageHeader from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Settings, Save, Trash2 } from 'lucide-react';
+import { Plus, Settings, Save, Trash2, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
+import DedupeProductsModal from '@/components/products/DedupeProductsModal';
 
 const KEY_LABELS = {
   DEFAULT_SHOPEE_FEE_RATE: { label: 'Tỷ lệ phí Shopee mặc định', hint: 'Ví dụ: 0.22 = 22%' },
@@ -22,6 +23,7 @@ export default function AppSettingsPage() {
   const [newRow, setNewRow] = useState({ setting_key: '', setting_value_number: '', setting_value_text: '', note: '' });
   const [showNew, setShowNew] = useState(false);
   const [addingSaving, setAddingSaving] = useState(false);
+  const [dedupeOpen, setDedupeOpen] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -75,7 +77,14 @@ export default function AppSettingsPage() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <PageHeader title="App Settings" subtitle="Cấu hình toàn cục dùng cho tính toán giá"
-        actions={<Button size="sm" onClick={() => setShowNew(v => !v)}><Plus className="w-4 h-4 mr-1.5" />Thêm Setting</Button>}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => setDedupeOpen(true)}>
+              <ShieldCheck className="w-4 h-4 mr-1.5" />Dedupe Product SKUs
+            </Button>
+            <Button size="sm" onClick={() => setShowNew(v => !v)}><Plus className="w-4 h-4 mr-1.5" />Thêm Setting</Button>
+          </div>
+        }
       />
 
       <div className="flex-1 overflow-y-auto p-5 space-y-3">
@@ -160,6 +169,7 @@ export default function AppSettingsPage() {
           );
         })}
       </div>
+      <DedupeProductsModal open={dedupeOpen} onOpenChange={setDedupeOpen} onDone={() => {}} />
     </div>
   );
 }

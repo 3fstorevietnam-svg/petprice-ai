@@ -146,12 +146,12 @@ function normalizeRow(row) {
   };
 }
 
-async function findExistingProduct(sku, skuMap) {
-  if (skuMap[sku]) return skuMap[sku];
-  const found = await withRateLimitRetry(() => base44.entities.Product.filter({ sku }, undefined, 1));
-  const product = Array.isArray(found) ? found[0] : null;
-  if (product?.id) skuMap[sku] = product;
-  return product;
+function pickBestRecord(records) {
+  return records.slice().sort((a, b) => {
+    const da = new Date(a.updated_date || a.created_date || 0).getTime();
+    const db = new Date(b.updated_date || b.created_date || 0).getTime();
+    return db - da;
+  })[0];
 }
 
 export default function ImportProductsModal({ open, onOpenChange, onImportDone }) {
@@ -217,20 +217,44 @@ export default function ImportProductsModal({ open, onOpenChange, onImportDone }
       let created = 0;
       let updated = 0;
       let failed = 0;
+      let clonesDeleted = 0;
       const errors = [];
 
       for (const row of validRows) {
         const payload = normalizeRow(row);
         try {
-          const existingProduct = await findExistingProduct(payload.sku, skuMap);
-          if (existingProduct?.id) {
-            await withRateLimitRetry(() => base44.entities.Product.update(existingProduct.id, payload));
-            skuMap[payload.sku] = { ...existingProduct, ...payload };
-            updated += 1;
+          // Always query DB fresh to catch all existing records for this SKU
+          const found = await withRateLimitRetry(() =>
+            base44.entities.Product.filter({ sku: payload.sku }, undefined, 50)
+          );
+          const matches = Array.isArray(found) ? found : [];
+
+          if (matches.length === 0) {
+            // Also check skuMap from the initial list load
+            const fromMap = skuMap[payload.sku];
+            if (fromMap?.id) {
+              await withRateLimitRetry(() => base44.entities.Product.update(fromMap.id, payload));
+              skuMap[payload.sku] = { ...fromMap, ...payload };
+              updated += 1;
+            } else {
+              const createdProduct = await withRateLimitRetry(() => base44.entities.Product.create(payload));
+              skuMap[payload.sku] = createdProduct || payload;
+              created += 1;
+            }
           } else {
-            const createdProduct = await withRateLimitRetry(() => base44.entities.Product.create(payload));
-            skuMap[payload.sku] = createdProduct || payload;
-            created += 1;
+            // Pick the best record to keep, update it, delete clones
+            const keeper = pickBestRecord(matches);
+            await withRateLimitRetry(() => base44.entities.Product.update(keeper.id, payload));
+            skuMap[payload.sku] = { ...keeper, ...payload };
+            updated += 1;
+
+            // Auto-heal: delete any extra duplicates found during import
+            const clones = matches.filter((p) => p.id !== keeper.id);
+            for (const clone of clones) {
+              await withRateLimitRetry(() => base44.entities.Product.delete(clone.id));
+              clonesDeleted += 1;
+              await sleep(300);
+            }
           }
         } catch (err) {
           failed += 1;
@@ -246,14 +270,15 @@ export default function ImportProductsModal({ open, onOpenChange, onImportDone }
         created,
         updated,
         failed,
+        clonesDeleted,
         errors,
       };
       setResult(summary);
 
       if (failed > 0) {
-        toast.warning(`Import finished with ${failed} failed row(s): ${created} created, ${updated} updated`);
+        toast.warning(`Import finished with ${failed} failed row(s): ${created} created, ${updated} updated, ${clonesDeleted} clones deleted`);
       } else {
-        toast.success(`Import done: ${created} created, ${updated} updated`);
+        toast.success(`Import done: ${created} created, ${updated} updated${clonesDeleted > 0 ? `, ${clonesDeleted} clones deleted` : ''}`);
       }
 
       onImportDone?.();
@@ -280,7 +305,7 @@ export default function ImportProductsModal({ open, onOpenChange, onImportDone }
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                 <span className="text-sm font-semibold text-emerald-800">Import Complete</span>
               </div>
-              <div className="grid grid-cols-6 gap-3">
+              <div className="grid grid-cols-7 gap-2">
                 {[
                   ['Total Rows', result.total],
                   ['Valid', result.valid, 'text-emerald-700'],
@@ -288,6 +313,7 @@ export default function ImportProductsModal({ open, onOpenChange, onImportDone }
                   ['Created', result.created, 'text-blue-700'],
                   ['Updated', result.updated, 'text-violet-700'],
                   ['Failed', result.failed, result.failed > 0 ? 'text-red-600' : ''],
+                  ['Clones Del.', result.clonesDeleted ?? 0, result.clonesDeleted > 0 ? 'text-orange-600' : ''],
                 ].map(([label, val, cls]) => (
                   <div key={label} className="text-center">
                     <div className={cn('text-xl font-bold', cls || 'text-foreground')}>{val}</div>
