@@ -13,6 +13,31 @@ const VALID_ROLES = ['moi','core','upsell'];
 const VALID_STATUSES = ['active','paused','killed'];
 const MAX_EXISTING_LOOKUP = 2000;
 const PREVIEW_LIMIT = 200;
+const REQUEST_DELAY_MS = 500;
+const RATE_LIMIT_RETRIES = 6;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRateLimitError(error) {
+  const message = String(error?.message || error || '').toLowerCase();
+  return message.includes('rate limit') || message.includes('too many requests') || message.includes('429');
+}
+
+async function withRateLimitRetry(operation) {
+  let lastError;
+  for (let attempt = 0; attempt <= RATE_LIMIT_RETRIES; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (!isRateLimitError(error) || attempt === RATE_LIMIT_RETRIES) break;
+      await sleep(1000 * 2 ** attempt);
+    }
+  }
+  throw lastError;
+}
 
 function downloadCSV() {
   const rows = [TEMPLATE_HEADERS, SAMPLE_ROW];
@@ -123,7 +148,7 @@ function normalizeRow(row) {
 
 async function findExistingProduct(sku, skuMap) {
   if (skuMap[sku]) return skuMap[sku];
-  const found = await base44.entities.Product.filter({ sku }, undefined, 1);
+  const found = await withRateLimitRetry(() => base44.entities.Product.filter({ sku }, undefined, 1));
   const product = Array.isArray(found) ? found[0] : null;
   if (product?.id) skuMap[sku] = product;
   return product;
@@ -183,7 +208,7 @@ export default function ImportProductsModal({ open, onOpenChange, onImportDone }
 
     setImporting(true);
     try {
-      const existing = await base44.entities.Product.list('-created_date', MAX_EXISTING_LOOKUP);
+      const existing = await withRateLimitRetry(() => base44.entities.Product.list('-created_date', MAX_EXISTING_LOOKUP));
       const skuMap = (Array.isArray(existing) ? existing : []).reduce((acc, p) => {
         if (p?.sku) acc[p.sku] = p;
         return acc;
@@ -199,11 +224,11 @@ export default function ImportProductsModal({ open, onOpenChange, onImportDone }
         try {
           const existingProduct = await findExistingProduct(payload.sku, skuMap);
           if (existingProduct?.id) {
-            await base44.entities.Product.update(existingProduct.id, payload);
+            await withRateLimitRetry(() => base44.entities.Product.update(existingProduct.id, payload));
             skuMap[payload.sku] = { ...existingProduct, ...payload };
             updated += 1;
           } else {
-            const createdProduct = await base44.entities.Product.create(payload);
+            const createdProduct = await withRateLimitRetry(() => base44.entities.Product.create(payload));
             skuMap[payload.sku] = createdProduct || payload;
             created += 1;
           }
@@ -211,6 +236,7 @@ export default function ImportProductsModal({ open, onOpenChange, onImportDone }
           failed += 1;
           errors.push({ row: row._row, sku: payload.sku, error: err.message || 'Import failed' });
         }
+        await sleep(REQUEST_DELAY_MS);
       }
 
       const summary = {
