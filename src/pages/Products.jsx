@@ -5,11 +5,29 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import FormDialog from '@/components/admin/FormDialog';
-import { Plus, Search, Package, AlertTriangle, Upload, Trash2 } from 'lucide-react';
+import { Plus, Search, Package, AlertTriangle, Upload, Trash2, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import ImportProductsModal from '@/components/products/ImportProductsModal';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+
+const REQUEST_DELAY_MS = 500;
+function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+function normalizeSku(sku) { return String(sku || '').trim().toUpperCase(); }
+function scoreProduct(product) { return new Date(product.updated_date || product.created_date || 0).getTime() || 0; }
+function pickKeeper(items) { return [...items].sort((a, b) => scoreProduct(b) - scoreProduct(a))[0]; }
+function mergeProductData(keeper, clones) {
+  const merged = { ...keeper };
+  const fields = ['sku','name','category','cost','current_price','shopee_fee_rate','ops_fee','packing_fee','fixed_fee','sku_role','combo_qty','min_price','max_price','status','notes','market_low','market_avg','market_high','last_sold_at'];
+  for (const clone of clones) {
+    for (const field of fields) {
+      const keeperBlank = merged[field] === undefined || merged[field] === null || merged[field] === '';
+      const cloneHasValue = clone[field] !== undefined && clone[field] !== null && clone[field] !== '';
+      if (keeperBlank && cloneHasValue) merged[field] = clone[field];
+    }
+  }
+  return merged;
+}
 
 const STATUS_COLORS = { active: 'bg-emerald-100 text-emerald-800', paused: 'bg-yellow-100 text-yellow-800', killed: 'bg-red-100 text-red-700' };
 const ROLE_COLORS = { moi: 'bg-purple-100 text-purple-800', core: 'bg-blue-100 text-blue-800', upsell: 'bg-orange-100 text-orange-800' };
@@ -92,6 +110,7 @@ export default function Products() {
   const [importOpen, setImportOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null); // product object to delete
   const [deleting, setDeleting] = useState(false);
+  const [dedupeRunning, setDedupeRunning] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -180,6 +199,82 @@ export default function Products() {
     }
   };
 
+  const runDedupe = async () => {
+    const confirmed = window.confirm(
+      'This will permanently delete duplicate Product rows and keep one row per exact SKU. Continue?'
+    );
+    if (!confirmed) return;
+
+    setDedupeRunning(true);
+    try {
+      // Load all products using pagination (same as load())
+      const pageSize = 500;
+      let offset = 0;
+      const allProducts = [];
+      while (true) {
+        const page = await base44.entities.Product.list('-updated_date', pageSize, offset);
+        if (!Array.isArray(page) || page.length === 0) break;
+        allProducts.push(...page);
+        if (page.length < pageSize) break;
+        offset += pageSize;
+      }
+
+      // Group by exact normalized SKU
+      const groups = {};
+      for (const product of allProducts) {
+        const key = normalizeSku(product.sku);
+        if (!key) continue;
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(product);
+      }
+
+      let duplicateSkuGroups = 0;
+      let clonesDeleted = 0;
+      let keepersUpdated = 0;
+      const examples = [];
+      const errors = [];
+
+      for (const [sku, items] of Object.entries(groups)) {
+        if (items.length <= 1) continue;
+        duplicateSkuGroups += 1;
+
+        const keeper = pickKeeper(items);
+        const clones = items.filter((item) => item.id !== keeper.id);
+        const merged = mergeProductData(keeper, clones);
+
+        try {
+          await base44.entities.Product.update(keeper.id, merged);
+          keepersUpdated += 1;
+          await sleep(REQUEST_DELAY_MS);
+
+          for (const clone of clones) {
+            await base44.entities.Product.delete(clone.id);
+            clonesDeleted += 1;
+            await sleep(REQUEST_DELAY_MS);
+          }
+
+          examples.push({ sku, kept: keeper.id, deleted: clones.map((c) => c.id) });
+        } catch (error) {
+          errors.push({ sku, error: error.message || String(error) });
+        }
+      }
+
+      if (errors.length > 0) {
+        toast.warning(`Dedupe done with ${errors.length} error(s): ${clonesDeleted} clones deleted from ${duplicateSkuGroups} groups`);
+        console.warn('Dedupe errors:', errors);
+      } else {
+        toast.success(`Dedupe done: ${clonesDeleted} clones deleted from ${duplicateSkuGroups} duplicate SKU groups`);
+      }
+      if (examples.length > 0) console.table(examples);
+
+      await load();
+    } catch (err) {
+      toast.error('Dedupe failed: ' + err.message);
+    } finally {
+      setDedupeRunning(false);
+    }
+  };
+
   const suggestionMap = suggestions.reduce((acc, s) => { acc[s.sku] = s; return acc; }, {});
 
   const filtered = products.filter(p => {
@@ -193,6 +288,9 @@ export default function Products() {
       <PageHeader title="Products" subtitle={`${products.length} SKUs`}
         actions={
           <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={runDedupe} disabled={dedupeRunning}>
+              <ShieldCheck className="w-4 h-4 mr-1.5" />{dedupeRunning ? 'Running...' : 'Dedupe SKUs'}
+            </Button>
             <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}><Upload className="w-4 h-4 mr-1.5" />Import Products</Button>
             <Button size="sm" onClick={openCreate}><Plus className="w-4 h-4 mr-1.5" />Add SKU</Button>
           </div>
