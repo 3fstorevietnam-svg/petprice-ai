@@ -3,7 +3,6 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 const DEFAULT_FEE_RATE = 0.22;
 const FIXED_COST = 15833;
 const TARGET_MARGIN = { moi: 0.02, core: 0.07, upsell: 0.13 };
-const COMBO_COST_THRESHOLD = 50000;
 const GIAM_GIA_MARGIN_FLOOR = 0.10;
 const GIAM_GIA_DROP_RATE = 0.04;
 
@@ -55,27 +54,115 @@ function uniqueProductsBySku(products) {
   return [...bySku.values()];
 }
 
-function roundComboQty(qty) {
-  if (qty <= 5) return 5;
-  if (qty <= 6) return 6;
-  if (qty <= 10) return 10;
-  if (qty <= 20) return 20;
+const MIN_COMBO_UNIT_DISCOUNT = 0.10; // combo unit price must be ≥ 10% cheaper than retail
+const MIN_COMPANY_MARGIN = 0.05;
+
+function toNumber(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function roundUpCustomerFriendlyPrice(price) {
+  const safePrice = toNumber(price);
+  if (safePrice <= 0) return 0;
+  const step = safePrice >= 100000 ? 1000 : 500;
+  const ceiling = Math.ceil(safePrice / step) * step;
+  const charmPrice = ceiling - 100;
+  return charmPrice >= safePrice ? charmPrice : ceiling;
+}
+
+function suggestMinimumProfitablePrice(cost, feeRate, fixedCost, minMargin = MIN_COMPANY_MARGIN) {
+  const denominator = 1 - feeRate - minMargin;
+  if (denominator <= 0) return 0;
+  return roundUpCustomerFriendlyPrice((cost + fixedCost) / denominator);
+}
+
+function clampProfitablePrice(price, minPrice, maxPrice) {
+  const lower = toNumber(minPrice, 0);
+  const safePrice = Math.max(Math.round(toNumber(price)), lower);
+  const upper = Number(maxPrice);
+  if (Number.isFinite(upper) && upper >= safePrice) {
+    return Math.min(safePrice, upper);
+  }
+  return safePrice;
+}
+
+function suggestComboQty(cost) {
+  const safeCost = Math.max(toNumber(cost), 1);
+  const rawQty = Math.ceil(FIXED_COST / (0.3 * safeCost));
+  if (rawQty <= 5) return 5;
+  if (rawQty <= 6) return 6;
+  if (rawQty <= 10) return 10;
+  if (rawQty <= 20) return 20;
   return 50;
 }
 
-function calcComboQty(unitCost) {
-  const raw = Math.ceil(FIXED_COST / (0.3 * parseFloat(unitCost)));
-  return roundComboQty(raw);
+function getComboQtyCap(unitPrice) {
+  return toNumber(unitPrice) > 40000 ? 12 : 24;
+}
+
+// Returns best combo candidate {qty, price, unitPrice, discountRate, margin} or null if none viable
+function suggestDiscountCombo(product) {
+  const cost = toNumber(product?.cost);
+  const currentPrice = toNumber(product?.current_price ?? product?.price);
+  const currentComboQty = Math.max(1, toNumber(product?.combo_qty, 1));
+  const currentUnitPrice = currentComboQty > 0 ? currentPrice / currentComboQty : currentPrice;
+  const feeRate = toNumber(product?.shopee_fee_rate, DEFAULT_FEE_RATE);
+  const fixedCost =
+    toNumber(product?.ops_fee, 3000) +
+    toNumber(product?.packing_fee, 11000) +
+    toNumber(product?.fixed_fee, 1833);
+  const minMargin = MIN_COMPANY_MARGIN;
+  const minPrice = toNumber(product?.min_price, 0);
+  const maxPrice = product?.max_price;
+  const cap = getComboQtyCap(currentUnitPrice);
+  const preferredQty = Math.min(Math.max(2, suggestComboQty(cost)), cap);
+
+  function candidateFor(qty) {
+    const rawPrice = suggestMinimumProfitablePrice(cost * qty, feeRate, fixedCost, minMargin);
+    const upper = Number(maxPrice);
+    const price =
+      Number.isFinite(upper) && upper >= rawPrice
+        ? clampProfitablePrice(rawPrice, minPrice, upper)
+        : Math.max(rawPrice, minPrice);
+    const unitPrice = qty > 0 ? price / qty : price;
+    const discountRate = currentUnitPrice > 0 ? (currentUnitPrice - unitPrice) / currentUnitPrice : 0;
+    const netRev = price * (1 - feeRate);
+    const profit = netRev - cost * qty - fixedCost;
+    const margin = price > 0 ? profit / price : 0;
+    return { qty, price, unitPrice, discountRate, margin };
+  }
+
+  // Try preferred qty first, then scan up to cap
+  const candidates = [];
+  for (let q = preferredQty; q <= cap; q++) {
+    candidates.push(candidateFor(q));
+  }
+  // Also try smaller quantities down to 2
+  for (let q = Math.max(2, preferredQty - 1); q >= 2; q--) {
+    candidates.push(candidateFor(q));
+  }
+
+  // Find viable: discount ≥ 10% AND margin ≥ 5%
+  const viable = candidates.filter(
+    c => c.discountRate >= MIN_COMBO_UNIT_DISCOUNT && c.margin >= minMargin && c.price > 0
+  );
+
+  if (viable.length === 0) return null;
+
+  // Pick lowest combo price (best deal for customer) among viable
+  viable.sort((a, b) => a.price - b.price);
+  return viable[0];
 }
 
 function fmtPrice(n) { return `₫${Math.round(n).toLocaleString('vi-VN')}`; }
 function fmtPct(n) { return `${(n * 100).toFixed(1)}%`; }
 
 function runPriceOptimizer({ product, perf7, perf30 }) {
-  const price  = parseFloat(product.current_price) || 0;
-  const cost   = parseFloat(product.cost) || 0;
-  const feeRate = parseFloat(product.shopee_fee_rate) || DEFAULT_FEE_RATE;
-  const role   = product.sku_role || 'core';
+  const price   = toNumber(product.current_price);
+  const cost    = toNumber(product.cost);
+  const feeRate = toNumber(product.shopee_fee_rate, DEFAULT_FEE_RATE);
+  const role    = product.sku_role || 'core';
   const targetMargin = TARGET_MARGIN[role] ?? TARGET_MARGIN.core;
 
   const netRevenue = price * (1 - feeRate);
@@ -83,29 +170,30 @@ function runPriceOptimizer({ product, perf7, perf30 }) {
   const margin     = price > 0 ? profit / price : 0;
   const marginPct  = margin * 100;
 
-  const orders7d    = perf7.reduce((s, r) => s + (r.orders || 0), 0);
-  const orders30d   = perf30.reduce((s, r) => s + (r.orders || 0), 0);
-  const views7d     = perf7.reduce((s, r) => s + (r.views || 0), 0);
-  const adsSpend7d  = perf7.reduce((s, r) => s + (r.ads_spend || 0), 0);
-  const revenue7d   = perf7.reduce((s, r) => s + (r.revenue || 0), 0);
-  const latestPerf  = perf7[0] || {};
-  const cvr         = parseFloat(latestPerf.conversion_rate) || 0;
-  const cvrPct      = cvr * 100;
-  const roas        = adsSpend7d > 0 ? revenue7d / adsSpend7d : 0;
+  const orders7d   = perf7.reduce((s, r) => s + (r.orders || 0), 0);
+  const orders30d  = perf30.reduce((s, r) => s + (r.orders || 0), 0);
+  const views7d    = perf7.reduce((s, r) => s + (r.views || 0), 0);
+  const adsSpend7d = perf7.reduce((s, r) => s + (r.ads_spend || 0), 0);
+  const revenue7d  = perf7.reduce((s, r) => s + (r.revenue || 0), 0);
+  const latestPerf = perf7[0] || {};
+  const cvr        = toNumber(latestPerf.conversion_rate);
+  const cvrPct     = cvr * 100;
+  const roas       = adsSpend7d > 0 ? revenue7d / adsSpend7d : 0;
 
-  const suggestedBasePrice = Math.ceil(((cost + FIXED_COST) / (1 - feeRate - targetMargin)) / 1000) * 1000;
+  // Minimum profitable retail price (target margin by role)
+  const minRetailDenom = 1 - feeRate - targetMargin;
+  const suggestedBasePrice = minRetailDenom > 0
+    ? roundUpCustomerFriendlyPrice((cost + FIXED_COST) / minRetailDenom)
+    : 0;
 
-  const comboQty      = calcComboQty(cost);
-  const comboCost     = cost * comboQty;
-  const comboPrice    = Math.ceil(((comboCost + FIXED_COST) / (1 - feeRate - targetMargin)) / 1000) * 1000;
-  const comboProfit   = comboPrice * (1 - feeRate) - comboCost - FIXED_COST;
-  const comboMarginPct = comboPrice > 0 ? (comboProfit / comboPrice) * 100 : 0;
+  // New combo algorithm: lowest price with ≥10% unit discount AND ≥5% company margin
+  const comboBest = suggestDiscountCombo(product);
 
-  const dropPrice         = Math.floor((price * (1 - GIAM_GIA_DROP_RATE)) / 1000) * 1000;
-  const dropNetRevenue    = dropPrice * (1 - feeRate);
-  const dropProfit        = dropNetRevenue - cost - FIXED_COST;
-  const dropMargin        = dropPrice > 0 ? dropProfit / dropPrice : 0;
-  const dropIsAcceptable  = dropMargin >= GIAM_GIA_MARGIN_FLOOR;
+  const dropPrice        = Math.floor((price * (1 - GIAM_GIA_DROP_RATE)) / 1000) * 1000;
+  const dropNetRevenue   = dropPrice * (1 - feeRate);
+  const dropProfit       = dropNetRevenue - cost - FIXED_COST;
+  const dropMargin       = dropPrice > 0 ? dropProfit / dropPrice : 0;
+  const dropIsAcceptable = dropMargin >= GIAM_GIA_MARGIN_FLOOR;
 
   let suggestedAction   = 'GIU_GIA';
   let suggestedPrice    = null;
@@ -114,27 +202,29 @@ function runPriceOptimizer({ product, perf7, perf30 }) {
   let confidence        = 60;
 
   if (margin < 0) {
-    if (cost < COMBO_COST_THRESHOLD && comboMarginPct > 0) {
+    // Losing money — prefer combo if viable, else raise price
+    if (comboBest) {
       suggestedAction   = 'GOM_COMBO';
-      suggestedPrice    = comboPrice;
-      suggestedComboQty = comboQty;
-      reason = `Lỗ ${fmtPct(-margin)} mỗi đơn (lợi nhuận ${fmtPrice(profit)}/đơn). Giá vốn ${fmtPrice(cost)} quá thấp để bán lẻ có lãi. Gom ${comboQty} đơn → giá combo ${fmtPrice(comboPrice)}, margin ${comboMarginPct.toFixed(1)}%.`;
+      suggestedPrice    = comboBest.price;
+      suggestedComboQty = comboBest.qty;
+      reason = `Lỗ ${fmtPct(-margin)} mỗi đơn (lợi nhuận ${fmtPrice(profit)}/đơn). Gom ${comboBest.qty} sản phẩm → giá combo ${fmtPrice(comboBest.price)} (đơn giá ${fmtPrice(comboBest.unitPrice)}, giảm ${fmtPct(comboBest.discountRate)} so với lẻ), margin ${fmtPct(comboBest.margin)}.`;
       confidence = 85;
     } else {
       suggestedAction = 'TANG_GIA';
       suggestedPrice  = suggestedBasePrice;
-      reason = `Lỗ ${fmtPct(-margin)} mỗi đơn (lợi nhuận ${fmtPrice(profit)}/đơn). Cần tăng giá lên ${fmtPrice(suggestedBasePrice)} để đạt mục tiêu margin ${(targetMargin * 100).toFixed(0)}% (role: ${role}).`;
+      reason = `Lỗ ${fmtPct(-margin)} mỗi đơn (lợi nhuận ${fmtPrice(profit)}/đơn). Cần tăng giá lên ${fmtPrice(suggestedBasePrice)} để đạt mục tiêu margin ${(targetMargin * 100).toFixed(0)}% (role: ${role}). Không thể gom combo với mức giảm ≥10% trong giới hạn số lượng cho phép.`;
       confidence = 90;
     }
-  } else if (cost < COMBO_COST_THRESHOLD && (product.combo_qty || 1) < 5 && comboMarginPct > marginPct + 3) {
+  } else if (comboBest && comboBest.margin >= MIN_COMPANY_MARGIN) {
+    // Combo viable: lower unit price by ≥10%, still profitable — prefer combo over retail raise
     suggestedAction   = 'GOM_COMBO';
-    suggestedPrice    = comboPrice;
-    suggestedComboQty = comboQty;
-    reason = `Giá vốn ${fmtPrice(cost)} thuộc nhóm thấp và chưa gom combo (combo_qty hiện tại: ${product.combo_qty || 1}). Gom ${comboQty} đơn → margin tăng từ ${marginPct.toFixed(1)}% lên ${comboMarginPct.toFixed(1)}%.`;
-    confidence = 78;
+    suggestedPrice    = comboBest.price;
+    suggestedComboQty = comboBest.qty;
+    reason = `Gom ${comboBest.qty} sản phẩm → giá combo ${fmtPrice(comboBest.price)} (đơn giá ${fmtPrice(comboBest.unitPrice)}, rẻ hơn ${fmtPct(comboBest.discountRate)} so với giá lẻ ${fmtPrice(price)}). Margin combo ${fmtPct(comboBest.margin)} ≥ 5%. Tăng giá trị đơn hàng và giảm chi phí cố định/sản phẩm.`;
+    confidence = 82;
   } else if (orders7d > 15 && margin < targetMargin) {
     const raiseRate = margin < 0.02 ? 0.10 : (margin < 0.05 ? 0.06 : 0.03);
-    suggestedPrice  = Math.ceil((price * (1 + raiseRate)) / 1000) * 1000;
+    suggestedPrice  = roundUpCustomerFriendlyPrice(price * (1 + raiseRate));
     suggestedAction = 'TANG_GIA';
     reason = `${orders7d} đơn/7 ngày cho thấy nhu cầu tốt, nhưng margin ${marginPct.toFixed(1)}% dưới mục tiêu ${(targetMargin * 100).toFixed(0)}%. Tăng ${(raiseRate * 100).toFixed(0)}% lên ${fmtPrice(suggestedPrice)} — nếu đơn không giảm > 30% trong 7 ngày, giữ giá mới.`;
     confidence = 80;
@@ -148,15 +238,15 @@ function runPriceOptimizer({ product, perf7, perf30 }) {
     reason = `${views7d.toLocaleString()} lượt xem/7 ngày nhưng CVR ${cvrPct.toFixed(2)}% thấp. Không giảm giá vì margin ${marginPct.toFixed(1)}% quá sát đáy. Cần test lại ảnh/nội dung để cải thiện chuyển đổi.`;
     confidence = 65;
   } else if (orders30d === 0) {
-    if (cost < COMBO_COST_THRESHOLD) {
+    if (comboBest) {
       suggestedAction   = 'GOM_COMBO';
-      suggestedPrice    = comboPrice;
-      suggestedComboQty = comboQty;
-      reason = `0 đơn hàng trong 30 ngày. Giá vốn ${fmtPrice(cost)} còn có thể gom combo ${comboQty} đơn → giá ${fmtPrice(comboPrice)}, margin ${comboMarginPct.toFixed(1)}%. Nếu combo cũng không có đơn sau 14 ngày → Kill SKU.`;
+      suggestedPrice    = comboBest.price;
+      suggestedComboQty = comboBest.qty;
+      reason = `0 đơn hàng trong 30 ngày. Thử gom ${comboBest.qty} sản phẩm → giá combo ${fmtPrice(comboBest.price)} (đơn giá ${fmtPrice(comboBest.unitPrice)}, giảm ${fmtPct(comboBest.discountRate)}). Nếu combo cũng không có đơn sau 14 ngày → Kill SKU.`;
       confidence = 74;
     } else {
       suggestedAction = 'KILL_SKU';
-      reason = `0 đơn hàng trong 30 ngày. Giá vốn ${fmtPrice(cost)} quá cao để gom combo có lãi. SKU đã chết — đề nghị xoá khỏi danh mục để tránh giữ vốn tồn kho.`;
+      reason = `0 đơn hàng trong 30 ngày. Không thể gom combo với mức giảm ≥10% trong giới hạn số lượng cho phép. SKU đã chết — đề nghị xoá khỏi danh mục để tránh giữ vốn tồn kho.`;
       confidence = 85;
     }
   } else {
