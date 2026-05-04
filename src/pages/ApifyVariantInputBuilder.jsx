@@ -21,7 +21,7 @@ const EXAMPLES = {
 export default function ApifyVariantInputBuilder() {
   const [inputText, setInputText] = useState('');
   const [snapshotDate, setSnapshotDate] = useState(today);
-  const [webhookUrl, setWebhookUrl] = useState('https://shopeeaiprice.base44.app/functions/shopee-variant-bulk-upsert');
+  const [webhookUrl, setWebhookUrl] = useState('https://shopeeaiprice.base44.app/functions/shopeevariantbulkupsert');
   const [runSource, setRunSource] = useState('base44_variant_input_builder');
   const [maxRequests, setMaxRequests] = useState(100);
 
