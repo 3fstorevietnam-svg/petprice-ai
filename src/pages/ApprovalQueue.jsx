@@ -153,7 +153,7 @@ export default function ApprovalQueue() {
 
   const load = () => {
     setLoading(true);
-    base44.entities.AISuggestion.filter({ status: 'pending' }, '-rec_date', 300)
+    base44.entities.AISuggestion.filter({ status: 'pending' }, '-rec_date', 5000)
       .then(d => { setItems(sortItems(d)); setLoading(false); });
   };
 

@@ -1,13 +1,59 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 const DEFAULT_FEE_RATE = 0.22;
-const FIXED_COST = 15833; // ops(3000) + packing(11000) + fixed(1833)
+const FIXED_COST = 15833;
 const TARGET_MARGIN = { moi: 0.02, core: 0.07, upsell: 0.13 };
-// SKU is treated as low-price / combo candidate if cost < this threshold
 const COMBO_COST_THRESHOLD = 50000;
-// Only recommend GIAM_GIA if margin will remain above this floor after discount
 const GIAM_GIA_MARGIN_FLOOR = 0.10;
 const GIAM_GIA_DROP_RATE = 0.04;
+
+const ENTITY_LOAD_LIMIT = 5000;
+const REQUEST_DELAY_MS = 250;
+const RATE_LIMIT_RETRIES = 5;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRateLimitError(error) {
+  const message = String(error?.message || error || '').toLowerCase();
+  return message.includes('rate limit') || message.includes('too many requests') || message.includes('429');
+}
+
+async function withRateLimitRetry(operation) {
+  let lastError;
+  for (let attempt = 0; attempt <= RATE_LIMIT_RETRIES; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (!isRateLimitError(error) || attempt === RATE_LIMIT_RETRIES) break;
+      await sleep(1000 * 2 ** attempt);
+    }
+  }
+  throw lastError;
+}
+
+function normalizeSku(sku) {
+  return String(sku || '').trim().toUpperCase();
+}
+
+function scoreRecord(record) {
+  return new Date(record?.updated_date || record?.created_date || 0).getTime() || 0;
+}
+
+function uniqueProductsBySku(products) {
+  const bySku = new Map();
+  for (const product of products || []) {
+    const key = normalizeSku(product?.sku);
+    if (!key) continue;
+    const existing = bySku.get(key);
+    if (!existing || scoreRecord(product) > scoreRecord(existing)) {
+      bySku.set(key, product);
+    }
+  }
+  return [...bySku.values()];
+}
 
 function roundComboQty(qty) {
   if (qty <= 5) return 5;
@@ -18,7 +64,6 @@ function roundComboQty(qty) {
 }
 
 function calcComboQty(unitCost) {
-  // Minimum qty so that fixed cost is < 30% of gross revenue at target margin
   const raw = Math.ceil(FIXED_COST / (0.3 * parseFloat(unitCost)));
   return roundComboQty(raw);
 }
@@ -33,49 +78,41 @@ function runPriceOptimizer({ product, perf7, perf30 }) {
   const role   = product.sku_role || 'core';
   const targetMargin = TARGET_MARGIN[role] ?? TARGET_MARGIN.core;
 
-  // ── Current unit economics ──────────────────────────────────────────
   const netRevenue = price * (1 - feeRate);
   const profit     = netRevenue - cost - FIXED_COST;
   const margin     = price > 0 ? profit / price : 0;
   const marginPct  = margin * 100;
 
-  // ── Performance aggregates ──────────────────────────────────────────
   const orders7d    = perf7.reduce((s, r) => s + (r.orders || 0), 0);
   const orders30d   = perf30.reduce((s, r) => s + (r.orders || 0), 0);
   const views7d     = perf7.reduce((s, r) => s + (r.views || 0), 0);
   const adsSpend7d  = perf7.reduce((s, r) => s + (r.ads_spend || 0), 0);
   const revenue7d   = perf7.reduce((s, r) => s + (r.revenue || 0), 0);
   const latestPerf  = perf7[0] || {};
-  const cvr         = parseFloat(latestPerf.conversion_rate) || 0; // stored as ratio (0.008 = 0.8%)
+  const cvr         = parseFloat(latestPerf.conversion_rate) || 0;
   const cvrPct      = cvr * 100;
   const roas        = adsSpend7d > 0 ? revenue7d / adsSpend7d : 0;
 
-  // ── Suggested prices ────────────────────────────────────────────────
-  // Min price to hit target margin at single unit
   const suggestedBasePrice = Math.ceil(((cost + FIXED_COST) / (1 - feeRate - targetMargin)) / 1000) * 1000;
 
-  // Combo metrics
   const comboQty      = calcComboQty(cost);
   const comboCost     = cost * comboQty;
   const comboPrice    = Math.ceil(((comboCost + FIXED_COST) / (1 - feeRate - targetMargin)) / 1000) * 1000;
   const comboProfit   = comboPrice * (1 - feeRate) - comboCost - FIXED_COST;
   const comboMarginPct = comboPrice > 0 ? (comboProfit / comboPrice) * 100 : 0;
 
-  // Price after a GIAM_GIA drop — only valid if post-drop margin stays above floor
   const dropPrice         = Math.floor((price * (1 - GIAM_GIA_DROP_RATE)) / 1000) * 1000;
   const dropNetRevenue    = dropPrice * (1 - feeRate);
   const dropProfit        = dropNetRevenue - cost - FIXED_COST;
   const dropMargin        = dropPrice > 0 ? dropProfit / dropPrice : 0;
   const dropIsAcceptable  = dropMargin >= GIAM_GIA_MARGIN_FLOOR;
 
-  // ── Decision ────────────────────────────────────────────────────────
   let suggestedAction   = 'GIU_GIA';
   let suggestedPrice    = null;
   let suggestedComboQty = null;
   let reason            = '';
   let confidence        = 60;
 
-  // Rule 1 — Negative margin: fix economics first
   if (margin < 0) {
     if (cost < COMBO_COST_THRESHOLD && comboMarginPct > 0) {
       suggestedAction   = 'GOM_COMBO';
@@ -89,38 +126,28 @@ function runPriceOptimizer({ product, perf7, perf30 }) {
       reason = `Lỗ ${fmtPct(-margin)} mỗi đơn (lợi nhuận ${fmtPrice(profit)}/đơn). Cần tăng giá lên ${fmtPrice(suggestedBasePrice)} để đạt mục tiêu margin ${(targetMargin * 100).toFixed(0)}% (role: ${role}).`;
       confidence = 90;
     }
-  }
-  // Rule 2 — Low-price SKU not yet bundled → force combo evaluation
-  else if (cost < COMBO_COST_THRESHOLD && (product.combo_qty || 1) < 5 && comboMarginPct > marginPct + 3) {
+  } else if (cost < COMBO_COST_THRESHOLD && (product.combo_qty || 1) < 5 && comboMarginPct > marginPct + 3) {
     suggestedAction   = 'GOM_COMBO';
     suggestedPrice    = comboPrice;
     suggestedComboQty = comboQty;
     reason = `Giá vốn ${fmtPrice(cost)} thuộc nhóm thấp và chưa gom combo (combo_qty hiện tại: ${product.combo_qty || 1}). Gom ${comboQty} đơn → margin tăng từ ${marginPct.toFixed(1)}% lên ${comboMarginPct.toFixed(1)}%.`;
     confidence = 78;
-  }
-  // Rule 3 — Good demand, margin too thin → raise price
-  else if (orders7d > 15 && margin < targetMargin) {
+  } else if (orders7d > 15 && margin < targetMargin) {
     const raiseRate = margin < 0.02 ? 0.10 : (margin < 0.05 ? 0.06 : 0.03);
     suggestedPrice  = Math.ceil((price * (1 + raiseRate)) / 1000) * 1000;
     suggestedAction = 'TANG_GIA';
     reason = `${orders7d} đơn/7 ngày cho thấy nhu cầu tốt, nhưng margin ${marginPct.toFixed(1)}% dưới mục tiêu ${(targetMargin * 100).toFixed(0)}%. Tăng ${(raiseRate * 100).toFixed(0)}% lên ${fmtPrice(suggestedPrice)} — nếu đơn không giảm > 30% trong 7 ngày, giữ giá mới.`;
     confidence = 80;
-  }
-  // Rule 4 — High traffic, low CVR, acceptable margin → test price drop
-  else if (views7d > 800 && cvrPct < 1.0 && dropIsAcceptable) {
+  } else if (views7d > 800 && cvrPct < 1.0 && dropIsAcceptable) {
     suggestedAction = 'GIAM_GIA';
     suggestedPrice  = dropPrice;
     reason = `${views7d.toLocaleString()} lượt xem/7 ngày nhưng CVR chỉ ${cvrPct.toFixed(2)}% (chuẩn tốt ≥ 2%). Giảm ${(GIAM_GIA_DROP_RATE * 100).toFixed(0)}% → ${fmtPrice(dropPrice)}, margin sau giảm ${(dropMargin * 100).toFixed(1)}% vẫn trên ngưỡng an toàn 10%. Cần theo dõi CVR sau 7 ngày.`;
     confidence = 72;
-  }
-  // Rule 5 — High traffic, low CVR, but margin too thin to drop → test content/price
-  else if (views7d > 800 && cvrPct < 1.0 && !dropIsAcceptable) {
+  } else if (views7d > 800 && cvrPct < 1.0 && !dropIsAcceptable) {
     suggestedAction = 'GIU_GIA';
     reason = `${views7d.toLocaleString()} lượt xem/7 ngày nhưng CVR ${cvrPct.toFixed(2)}% thấp. Không giảm giá vì margin ${marginPct.toFixed(1)}% quá sát đáy. Cần test lại ảnh/nội dung để cải thiện chuyển đổi.`;
     confidence = 65;
-  }
-  // Rule 6 — Dead SKU: no orders in 30 days
-  else if (orders30d === 0) {
+  } else if (orders30d === 0) {
     if (cost < COMBO_COST_THRESHOLD) {
       suggestedAction   = 'GOM_COMBO';
       suggestedPrice    = comboPrice;
@@ -132,15 +159,12 @@ function runPriceOptimizer({ product, perf7, perf30 }) {
       reason = `0 đơn hàng trong 30 ngày. Giá vốn ${fmtPrice(cost)} quá cao để gom combo có lãi. SKU đã chết — đề nghị xoá khỏi danh mục để tránh giữ vốn tồn kho.`;
       confidence = 85;
     }
-  }
-  // Rule 7 — Healthy SKU
-  else {
+  } else {
     suggestedAction = 'GIU_GIA';
     reason = `SKU hoạt động ổn. Margin ${marginPct.toFixed(1)}% (mục tiêu ${(targetMargin * 100).toFixed(0)}%), ${orders7d} đơn/7 ngày, ${orders30d} đơn/30 ngày. Giữ giá ${fmtPrice(price)} — theo dõi thêm 7 ngày.`;
     confidence = 65;
   }
 
-  // ── Ads decision ────────────────────────────────────────────────────
   let adsAction = 'GIU_NGUYEN';
   let adsReason = '';
 
@@ -161,15 +185,13 @@ function runPriceOptimizer({ product, perf7, perf30 }) {
     adsReason = `SKU có ${orders7d} đơn/7 ngày organic và margin ${marginPct.toFixed(1)}% tốt. Thử chạy ads để scale — đặt target ROAS ≥ 3.`;
   }
 
-  const fullReason = adsReason
-    ? `${reason}\n\n[Ads] ${adsReason}`
-    : reason;
+  const fullReason = adsReason ? `${reason}\n\n[Ads] ${adsReason}` : reason;
 
   return {
     sku: product.sku,
     current_price: price,
     current_profit: Math.round(profit),
-    current_margin: parseFloat(marginPct.toFixed(2)), // stored as percent (e.g. 9.91)
+    current_margin: parseFloat(marginPct.toFixed(2)),
     suggested_action: suggestedAction,
     suggested_price: suggestedPrice,
     suggested_combo_qty: suggestedComboQty,
@@ -187,54 +209,97 @@ Deno.serve(async (req) => {
 
     const today = new Date().toISOString().split('T')[0];
 
-    const products = await base44.asServiceRole.entities.Product.filter({ status: 'active' });
+    // Load full product list (no default 300 cap)
+    const productsRaw = await base44.asServiceRole.entities.Product.filter(
+      { status: 'active' },
+      '-updated_date',
+      ENTITY_LOAD_LIMIT
+    );
+
+    // Dedupe by SKU, keep most recently updated
+    const products = uniqueProductsBySku(productsRaw);
+
     if (products.length === 0) {
-      return Response.json({ success: true, processed: 0, created: 0, skipped: 0 });
+      return Response.json({ success: true, processed: 0, created: 0, updated: 0, failed: 0, total_products_loaded: 0 });
     }
 
-    const allPerf = await base44.asServiceRole.entities.DailyPerformance.list('-date', 2000);
+    // Load performance data
+    const allPerf = await base44.asServiceRole.entities.DailyPerformance.list('-date', 5000);
     const perfBySku = {};
     for (const r of allPerf) {
       if (!perfBySku[r.sku]) perfBySku[r.sku] = [];
       perfBySku[r.sku].push(r);
     }
 
-    const existingToday = await base44.asServiceRole.entities.AISuggestion.filter({ rec_date: today });
-    const existingSkus = new Set(existingToday.map(s => s.sku));
-
-    let created = 0;
-    let skipped = 0;
-    const results = [];
-
-    for (const product of products) {
-      if (existingSkus.has(product.sku)) { skipped++; continue; }
-
-      const perfData = (perfBySku[product.sku] || []).sort((a, b) => b.date.localeCompare(a.date));
-      const perf7  = perfData.slice(0, 7);
-      const perf30 = perfData.slice(0, 30);
-
-      const s = runPriceOptimizer({ product, perf7, perf30 });
-
-      await base44.asServiceRole.entities.AISuggestion.create({
-        sku:                  s.sku,
-        rec_date:             today,
-        current_price:        s.current_price,
-        current_profit:       s.current_profit,
-        current_margin:       s.current_margin,
-        suggested_action:     s.suggested_action,
-        suggested_price:      s.suggested_price || undefined,
-        suggested_combo_qty:  s.suggested_combo_qty || undefined,
-        ads_action:           s.ads_action,
-        reason:               s.reason,
-        confidence:           s.confidence,
-        status:               'pending',
-      });
-
-      results.push({ sku: s.sku, action: s.suggested_action });
-      created++;
+    // Load existing suggestions for today to support upsert
+    const existingToday = await base44.asServiceRole.entities.AISuggestion.filter(
+      { rec_date: today },
+      '-rec_date',
+      ENTITY_LOAD_LIMIT
+    );
+    const existingBySkuMap = {};
+    for (const s of existingToday) {
+      existingBySkuMap[s.sku] = s;
     }
 
-    return Response.json({ success: true, processed: products.length, created, skipped, today, results });
+    let created = 0;
+    let updated = 0;
+    let failed = 0;
+    const errors = [];
+
+    for (const product of products) {
+      try {
+        const perfData = (perfBySku[product.sku] || []).sort((a, b) => b.date.localeCompare(a.date));
+        const perf7  = perfData.slice(0, 7);
+        const perf30 = perfData.slice(0, 30);
+
+        const s = runPriceOptimizer({ product, perf7, perf30 });
+
+        const payload = {
+          sku:                 s.sku,
+          rec_date:            today,
+          current_price:       s.current_price,
+          current_profit:      s.current_profit,
+          current_margin:      s.current_margin,
+          suggested_action:    s.suggested_action,
+          suggested_price:     s.suggested_price || undefined,
+          suggested_combo_qty: s.suggested_combo_qty || undefined,
+          ads_action:          s.ads_action,
+          reason:              s.reason,
+          confidence:          s.confidence,
+          status:              'pending',
+        };
+
+        const existing = existingBySkuMap[product.sku];
+        if (existing) {
+          await withRateLimitRetry(() =>
+            base44.asServiceRole.entities.AISuggestion.update(existing.id, payload)
+          );
+          updated += 1;
+        } else {
+          await withRateLimitRetry(() =>
+            base44.asServiceRole.entities.AISuggestion.create(payload)
+          );
+          created += 1;
+        }
+      } catch (error) {
+        failed += 1;
+        errors.push(`${product.sku}: ${error?.message || String(error)}`);
+      }
+
+      await sleep(REQUEST_DELAY_MS);
+    }
+
+    return Response.json({
+      success: true,
+      total_products_loaded: productsRaw.length,
+      processed: products.length,
+      created,
+      updated,
+      failed,
+      today,
+      errors: errors.slice(0, 20),
+    });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }

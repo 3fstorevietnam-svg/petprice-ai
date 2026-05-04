@@ -100,8 +100,8 @@ export default function AISuggestions() {
   const load = () => {
     setLoading(true);
     Promise.all([
-      base44.entities.AISuggestion.list('-rec_date', 300),
-      base44.entities.Product.list('-created_date', 300),
+      base44.entities.AISuggestion.list('-rec_date', 5000),
+      base44.entities.Product.list('-updated_date', 5000),
     ]).then(([s, p]) => { setSuggestions(s); setProducts(p); setLoading(false); });
   };
 
