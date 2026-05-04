@@ -61,6 +61,38 @@ function stringifyRaw(value) {
   }
 }
 
+function isBadShopeeShellRow(row) {
+  const combined = [
+    row.variant_name,
+    row.parent_product_name,
+    row.product_name,
+    row.name,
+    row.title,
+    row.display_name,
+  ]
+    .map((v) => text(v).toLowerCase())
+    .join(" ");
+
+  return (
+    combined.includes("back to home page") ||
+    combined.includes("log in") ||
+    combined.includes("login") ||
+    combined.includes("skip to main content") ||
+    combined.includes("shopee việt nam") ||
+    combined.includes("shopee viet nam") ||
+    combined.includes("hot deals")
+  );
+}
+
+function hasUsefulVariantData(row) {
+  return (
+    parseNumber(row.variant_price ?? row.price) !== null ||
+    parseCount(row.variant_stock ?? row.stock) !== null ||
+    parseCount(row.variant_sold_est ?? row.sold) !== null ||
+    text(row.variant_id || row.model_id || row.modelId) !== ""
+  );
+}
+
 function normalizeRow(row) {
   const rawValue = row.raw_json ?? row.raw ?? row;
 
@@ -207,6 +239,18 @@ Deno.serve(async (req) => {
       if (!text(row.sku)) {
         failed += 1;
         errors.push(`Skipped row missing sku: ${JSON.stringify(row).slice(0, 120)}`);
+        continue;
+      }
+
+      if (isBadShopeeShellRow(row)) {
+        failed += 1;
+        errors.push(`Skipped bad Shopee shell row sku=${text(row.sku)}`);
+        continue;
+      }
+
+      if (!hasUsefulVariantData(row)) {
+        failed += 1;
+        errors.push(`Skipped empty variant row sku=${text(row.sku)}`);
         continue;
       }
 
