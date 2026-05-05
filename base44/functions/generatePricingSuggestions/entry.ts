@@ -323,14 +323,14 @@ Deno.serve(async (req) => {
     const offset = Math.max(0, toNumber(body?.offset, 0));
     const limit = Math.max(1, Math.min(25, toNumber(body?.limit, DEFAULT_BATCH_LIMIT)));
 
-    const productsRaw = await base44.asServiceRole.entities.Product.list(
+    const productsRaw = await base44.asServiceRole.entities.Product.filter(
+      { status: 'active' },
       '-updated_date',
       limit,
       offset
     );
 
-    const products = uniqueProductsBySku(productsRaw)
-      .filter(product => product.status === 'active');
+    const products = uniqueProductsBySku(productsRaw);
 
     if (!Array.isArray(productsRaw) || productsRaw.length === 0) {
       return Response.json({
