@@ -142,11 +142,16 @@ export default function AISuggestions() {
     }
   };
 
+  // Only count/show pending from the latest rec_date batch
+  const latestRecDate = suggestions.reduce((best, s) => (!best || s.rec_date > best ? s.rec_date : best), null);
+  const latestPendingSuggestions = suggestions.filter(s => s.status === 'pending' && s.rec_date === latestRecDate);
+
   const filtered = suggestions.filter(s => {
     const matchSku = !skuSearch || s.sku?.toLowerCase().includes(skuSearch.toLowerCase());
     if (!matchSku) return false;
+    // "pending" tab only shows latest batch pending
+    if (activeFilter === 'pending') return s.status === 'pending' && s.rec_date === latestRecDate;
     if (activeFilter === 'all') return true;
-    if (activeFilter === 'pending') return s.status === 'pending';
     if (activeFilter === 'losing') return (s.current_profit !== undefined && s.current_profit !== null && s.current_profit < 0) || (s.current_margin !== undefined && s.current_margin !== null && s.current_margin < 0);
     if (activeFilter === 'NGUNG_ADS') return s.ads_action === 'NGUNG_ADS';
     if (activeFilter === 'CHAY_ADS') return s.ads_action === 'CHAY_ADS';
@@ -155,7 +160,7 @@ export default function AISuggestions() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <PageHeader title="AI Pricing Suggestions" subtitle={`${suggestions.filter(s => s.status === 'pending').length} pending approval`}
+      <PageHeader title="AI Pricing Suggestions" subtitle={`${latestPendingSuggestions.length} pending approval${latestRecDate ? ` (${latestRecDate})` : ''}`}
         actions={
           <div className="flex items-center gap-2">
             <Button size="sm" variant="outline" onClick={openCreate}><Plus className="w-4 h-4 mr-1.5" />Manual</Button>

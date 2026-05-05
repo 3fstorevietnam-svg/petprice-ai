@@ -294,7 +294,9 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const today = new Date().toISOString().split('T')[0];
+    const body = req.method === 'POST' ? await req.json().catch(() => ({})) : {};
+    const recDate = body?.rec_date || new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const today = recDate;
 
     const productsRaw = await base44.asServiceRole.entities.Product.filter(
       { status: 'active' },
