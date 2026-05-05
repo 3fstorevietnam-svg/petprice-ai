@@ -99,11 +99,37 @@ export default function Dashboard() {
   const runAI = async () => {
     setRunning(true);
     try {
-      const res = await base44.functions.invoke('generatePricingSuggestions', {
-        version: 'COMBO_V4_10PCT_CAP_CLEAN_PENDING',
-      });
-      const { created = 0, processed = 0, deleted_pending = 0, version = 'AI' } = res.data || {};
-      toast.success(`✅ ${version}: ${processed} SKUs — ${created} gợi ý mới, xoá ${deleted_pending} pending cũ.`);
+      const recDate = new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const batchLimit = 25;
+      let offset = 0;
+      let hasMore = true;
+      let processed = 0;
+      let created = 0;
+      let updated = 0;
+      let deletedPending = 0;
+      let version = 'AI';
+
+      while (hasMore) {
+        const res = await base44.functions.invoke('generatePricingSuggestions', {
+          version: 'COMBO_V4_10PCT_CAP_CLEAN_PENDING',
+          rec_date: recDate,
+          offset,
+          limit: batchLimit,
+          cleanup_pending: offset === 0,
+        });
+        const data = res.data || {};
+        if (data.error) throw new Error(data.error);
+
+        version = data.version || version;
+        processed += data.processed || 0;
+        created += data.created || 0;
+        updated += data.updated || 0;
+        deletedPending += data.deleted_pending || 0;
+        hasMore = Boolean(data.has_more);
+        offset = data.next_offset || offset + batchLimit;
+      }
+
+      toast.success(`${version}: ${processed} SKUs — ${created} mới, ${updated} cập nhật, xoá ${deletedPending} pending cũ.`);
       loadData();
     } catch (e) {
       toast.error('AI analysis thất bại: ' + e.message);

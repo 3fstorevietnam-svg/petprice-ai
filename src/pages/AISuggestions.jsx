@@ -132,12 +132,37 @@ export default function AISuggestions() {
   const generateSuggestions = async () => {
     setGenerating(true);
     try {
-      const res = await base44.functions.invoke('generatePricingSuggestions', {
-        version: 'COMBO_V4_10PCT_CAP_CLEAN_PENDING',
-      });
-      const data = res.data || {};
-      if (data.error) throw new Error(data.error);
-      toast.success(`${data.version || 'AI'}: created ${data.created || 0}, deleted old pending ${data.deleted_pending || 0}`);
+      const recDate = format(new Date(), 'yyyy-MM-dd');
+      const batchLimit = 25;
+      let offset = 0;
+      let hasMore = true;
+      let processed = 0;
+      let created = 0;
+      let updated = 0;
+      let deletedPending = 0;
+      let version = 'AI';
+
+      while (hasMore) {
+        const res = await base44.functions.invoke('generatePricingSuggestions', {
+          version: 'COMBO_V4_10PCT_CAP_CLEAN_PENDING',
+          rec_date: recDate,
+          offset,
+          limit: batchLimit,
+          cleanup_pending: offset === 0,
+        });
+        const data = res.data || {};
+        if (data.error) throw new Error(data.error);
+
+        version = data.version || version;
+        processed += data.processed || 0;
+        created += data.created || 0;
+        updated += data.updated || 0;
+        deletedPending += data.deleted_pending || 0;
+        hasMore = Boolean(data.has_more);
+        offset = data.next_offset || offset + batchLimit;
+      }
+
+      toast.success(`${version}: processed ${processed}, created ${created}, updated ${updated}, deleted old pending ${deletedPending}`);
       load();
     } catch (e) {
       toast.error(`AI analysis failed: ${e.message || 'Unknown error'}`);

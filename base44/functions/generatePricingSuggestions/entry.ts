@@ -9,6 +9,7 @@ const GIAM_GIA_DROP_RATE = 0.04;
 const ENTITY_LOAD_LIMIT = 5000;
 const REQUEST_DELAY_MS = 0;
 const RATE_LIMIT_RETRIES = 5;
+const DEFAULT_BATCH_LIMIT = 25;
 
 const MIN_COMBO_UNIT_DISCOUNT = 0.10;
 const MIN_COMPANY_MARGIN = 0.05;
@@ -297,6 +298,9 @@ Deno.serve(async (req) => {
     const body = req.method === 'POST' ? await req.json().catch(() => ({})) : {};
     const recDate = body?.rec_date || new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const today = recDate;
+    const offset = Math.max(0, toNumber(body?.offset, 0));
+    const limit = Math.max(1, Math.min(100, toNumber(body?.limit, DEFAULT_BATCH_LIMIT)));
+    const shouldCleanupPending = body?.cleanup_pending === true || offset === 0;
 
     const productsRaw = await base44.asServiceRole.entities.Product.filter(
       { status: 'active' },
@@ -345,13 +349,14 @@ Deno.serve(async (req) => {
       }
     }
 
+    const batchProducts = products.slice(offset, offset + limit);
     let created = 0;
     let updated = 0;
     let deleted_pending = 0;
     let failed = 0;
     const errors = [];
 
-    for (const product of products) {
+    for (const product of batchProducts) {
       try {
         const skuKey = normalizeSku(product.sku);
         const perfData = (perfBySku[skuKey] || []).sort((a, b) => String(b.date).localeCompare(String(a.date)));
@@ -395,23 +400,32 @@ Deno.serve(async (req) => {
       if (REQUEST_DELAY_MS > 0) await sleep(REQUEST_DELAY_MS);
     }
 
-    for (const duplicate of duplicatePending.slice(0, 200)) {
-      try {
-        await withRateLimitRetry(() =>
-          base44.asServiceRole.entities.AISuggestion.delete(duplicate.id)
-        );
-        deleted_pending += 1;
-      } catch (error) {
-        failed += 1;
-        errors.push(`${duplicate.sku || ''}: ${error?.message || String(error)}`);
+    if (shouldCleanupPending) {
+      for (const duplicate of duplicatePending.slice(0, 100)) {
+        try {
+          await withRateLimitRetry(() =>
+            base44.asServiceRole.entities.AISuggestion.delete(duplicate.id)
+          );
+          deleted_pending += 1;
+        } catch (error) {
+          failed += 1;
+          errors.push(`${duplicate.sku || ''}: ${error?.message || String(error)}`);
+        }
       }
     }
+
+    const nextOffset = offset + batchProducts.length;
 
     return Response.json({
       success: true,
       version: COMBO_VERSION_TAG,
       total_products_loaded: productsRaw.length,
-      processed: products.length,
+      processed: batchProducts.length,
+      total_products: products.length,
+      offset,
+      next_offset: nextOffset,
+      has_more: nextOffset < products.length,
+      limit,
       created,
       updated,
       deleted_pending,
