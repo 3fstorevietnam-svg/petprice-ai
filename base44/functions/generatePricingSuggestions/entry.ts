@@ -6,7 +6,6 @@ const TARGET_MARGIN = { moi: 0.02, core: 0.07, upsell: 0.13 };
 const GIAM_GIA_MARGIN_FLOOR = 0.10;
 const GIAM_GIA_DROP_RATE = 0.04;
 
-const ENTITY_LOAD_LIMIT = 5000;
 const REQUEST_DELAY_MS = 0;
 const RATE_LIMIT_RETRIES = 5;
 const DEFAULT_BATCH_LIMIT = 10;
@@ -324,27 +323,33 @@ Deno.serve(async (req) => {
     const offset = Math.max(0, toNumber(body?.offset, 0));
     const limit = Math.max(1, Math.min(25, toNumber(body?.limit, DEFAULT_BATCH_LIMIT)));
 
-    const productsRaw = await base44.asServiceRole.entities.Product.filter(
-      { status: 'active' },
+    const productsRaw = await base44.asServiceRole.entities.Product.list(
       '-updated_date',
-      ENTITY_LOAD_LIMIT
+      limit,
+      offset
     );
 
-    const products = uniqueProductsBySku(productsRaw);
+    const products = uniqueProductsBySku(productsRaw)
+      .filter(product => product.status === 'active');
 
-    if (products.length === 0) {
+    if (!Array.isArray(productsRaw) || productsRaw.length === 0) {
       return Response.json({
         success: true,
+        version: COMBO_VERSION_TAG,
         processed: 0,
         created: 0,
         updated: 0,
         failed: 0,
         total_products_loaded: 0,
+        offset,
+        next_offset: offset,
+        has_more: false,
+        limit,
         today,
       });
     }
 
-    const batchProducts = products.slice(offset, offset + limit);
+    const batchProducts = products;
     let created = 0;
     let updated = 0;
     let deleted_pending = 0;
@@ -401,17 +406,17 @@ Deno.serve(async (req) => {
       if (REQUEST_DELAY_MS > 0) await sleep(REQUEST_DELAY_MS);
     }
 
-    const nextOffset = offset + batchProducts.length;
+    const nextOffset = offset + productsRaw.length;
 
     return Response.json({
       success: true,
       version: COMBO_VERSION_TAG,
       total_products_loaded: productsRaw.length,
       processed: batchProducts.length,
-      total_products: products.length,
+      total_products: null,
       offset,
       next_offset: nextOffset,
-      has_more: nextOffset < products.length,
+      has_more: productsRaw.length === limit,
       limit,
       created,
       updated,
