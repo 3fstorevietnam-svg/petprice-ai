@@ -7,7 +7,7 @@ const GIAM_GIA_MARGIN_FLOOR = 0.10;
 const GIAM_GIA_DROP_RATE = 0.04;
 
 const ENTITY_LOAD_LIMIT = 5000;
-const REQUEST_DELAY_MS = 250;
+const REQUEST_DELAY_MS = 0;
 const RATE_LIMIT_RETRIES = 5;
 
 const MIN_COMBO_UNIT_DISCOUNT = 0.10;
@@ -332,17 +332,22 @@ Deno.serve(async (req) => {
       ENTITY_LOAD_LIMIT
     );
 
-    let deleted_pending = 0;
+    const existingBySkuMap = {};
+    const duplicatePending = [];
     for (const old of oldPending || []) {
-      await withRateLimitRetry(() =>
-        base44.asServiceRole.entities.AISuggestion.delete(old.id)
-      );
-      deleted_pending += 1;
-      await sleep(50);
+      const skuKey = normalizeSku(old.sku);
+      if (!skuKey) {
+        duplicatePending.push(old);
+      } else if (!existingBySkuMap[skuKey]) {
+        existingBySkuMap[skuKey] = old;
+      } else {
+        duplicatePending.push(old);
+      }
     }
 
     let created = 0;
     let updated = 0;
+    let deleted_pending = 0;
     let failed = 0;
     const errors = [];
 
@@ -370,16 +375,36 @@ Deno.serve(async (req) => {
           status: 'pending',
         };
 
-        await withRateLimitRetry(() =>
-          base44.asServiceRole.entities.AISuggestion.create(payload)
-        );
-        created += 1;
+        const existing = existingBySkuMap[skuKey];
+        if (existing) {
+          await withRateLimitRetry(() =>
+            base44.asServiceRole.entities.AISuggestion.update(existing.id, payload)
+          );
+          updated += 1;
+        } else {
+          await withRateLimitRetry(() =>
+            base44.asServiceRole.entities.AISuggestion.create(payload)
+          );
+          created += 1;
+        }
       } catch (error) {
         failed += 1;
         errors.push(`${product.sku}: ${error?.message || String(error)}`);
       }
 
-      await sleep(REQUEST_DELAY_MS);
+      if (REQUEST_DELAY_MS > 0) await sleep(REQUEST_DELAY_MS);
+    }
+
+    for (const duplicate of duplicatePending.slice(0, 200)) {
+      try {
+        await withRateLimitRetry(() =>
+          base44.asServiceRole.entities.AISuggestion.delete(duplicate.id)
+        );
+        deleted_pending += 1;
+      } catch (error) {
+        failed += 1;
+        errors.push(`${duplicate.sku || ''}: ${error?.message || String(error)}`);
+      }
     }
 
     return Response.json({
