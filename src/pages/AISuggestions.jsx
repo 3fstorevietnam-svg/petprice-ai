@@ -133,7 +133,7 @@ export default function AISuggestions() {
     setGenerating(true);
     try {
       const recDate = format(new Date(), 'yyyy-MM-dd');
-      const batchLimit = 10;
+      const batchLimit = 5;
       let offset = 0;
       let hasMore = true;
       let processed = 0;

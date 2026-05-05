@@ -8,7 +8,7 @@ const GIAM_GIA_DROP_RATE = 0.04;
 
 const REQUEST_DELAY_MS = 0;
 const RATE_LIMIT_RETRIES = 5;
-const DEFAULT_BATCH_LIMIT = 10;
+const DEFAULT_BATCH_LIMIT = 5;
 
 const MIN_COMBO_UNIT_DISCOUNT = 0.10;
 const MIN_COMPANY_MARGIN = 0.05;
@@ -47,17 +47,6 @@ async function findPendingSuggestionForSku(base44, sku) {
   );
   const [latest, ...duplicates] = rows || [];
   return { latest, duplicates };
-}
-
-async function findPerformanceForSku(base44, sku) {
-  const rows = await withRateLimitRetry(() =>
-    base44.asServiceRole.entities.DailyPerformance.filter(
-      { sku },
-      '-date',
-      30
-    )
-  );
-  return rows || [];
 }
 
 function normalizeSku(sku) {
@@ -321,7 +310,7 @@ Deno.serve(async (req) => {
     const recDate = body?.rec_date || new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const today = recDate;
     const offset = Math.max(0, toNumber(body?.offset, 0));
-    const limit = Math.max(1, Math.min(25, toNumber(body?.limit, DEFAULT_BATCH_LIMIT)));
+    const limit = Math.max(1, Math.min(10, toNumber(body?.limit, DEFAULT_BATCH_LIMIT)));
 
     const productsRaw = await base44.asServiceRole.entities.Product.filter(
       { status: 'active' },
@@ -359,11 +348,8 @@ Deno.serve(async (req) => {
     for (const product of batchProducts) {
       try {
         const { latest: existing, duplicates } = await findPendingSuggestionForSku(base44, product.sku);
-        const perfData = await findPerformanceForSku(base44, product.sku);
-        const perf7 = perfData.slice(0, 7);
-        const perf30 = perfData.slice(0, 30);
 
-        const s = runPriceOptimizer({ product, perf7, perf30 });
+        const s = runPriceOptimizer({ product, perf7: [], perf30: [] });
 
         const payload = {
           sku: s.sku,

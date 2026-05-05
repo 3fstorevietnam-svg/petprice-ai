@@ -100,7 +100,7 @@ export default function Dashboard() {
     setRunning(true);
     try {
       const recDate = new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
-      const batchLimit = 10;
+      const batchLimit = 5;
       let offset = 0;
       let hasMore = true;
       let processed = 0;
