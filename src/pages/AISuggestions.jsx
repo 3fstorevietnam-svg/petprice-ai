@@ -132,11 +132,15 @@ export default function AISuggestions() {
   const generateSuggestions = async () => {
     setGenerating(true);
     try {
-      const res = await base44.functions.invoke('generatePricingSuggestions', {});
-      toast.success(`Generated ${res.data?.created || 0} new suggestions`);
+      const res = await base44.functions.invoke('generatePricingSuggestions', {
+        version: 'COMBO_V4_10PCT_CAP_CLEAN_PENDING',
+      });
+      const data = res.data || {};
+      if (data.error) throw new Error(data.error);
+      toast.success(`${data.version || 'AI'}: created ${data.created || 0}, deleted old pending ${data.deleted_pending || 0}`);
       load();
     } catch (e) {
-      toast.error('AI analysis failed');
+      toast.error(`AI analysis failed: ${e.message || 'Unknown error'}`);
     } finally {
       setGenerating(false);
     }
@@ -151,7 +155,7 @@ export default function AISuggestions() {
     if (!matchSku) return false;
     // "pending" tab only shows latest batch pending
     if (activeFilter === 'pending') return s.status === 'pending' && s.rec_date === latestRecDate;
-    if (activeFilter === 'all') return true;
+    if (activeFilter === 'all') return s.status === 'pending' && s.rec_date === latestRecDate;
     if (activeFilter === 'losing') return (s.current_profit !== undefined && s.current_profit !== null && s.current_profit < 0) || (s.current_margin !== undefined && s.current_margin !== null && s.current_margin < 0);
     if (activeFilter === 'NGUNG_ADS') return s.ads_action === 'NGUNG_ADS';
     if (activeFilter === 'CHAY_ADS') return s.ads_action === 'CHAY_ADS';

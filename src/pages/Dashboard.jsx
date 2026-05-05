@@ -99,9 +99,11 @@ export default function Dashboard() {
   const runAI = async () => {
     setRunning(true);
     try {
-      const res = await base44.functions.invoke('generatePricingSuggestions', {});
-      const { created = 0, skipped = 0, processed = 0 } = res.data || {};
-      toast.success(`✅ AI xong! ${processed} SKUs xử lý — ${created} gợi ý mới, ${skipped} đã có.`);
+      const res = await base44.functions.invoke('generatePricingSuggestions', {
+        version: 'COMBO_V4_10PCT_CAP_CLEAN_PENDING',
+      });
+      const { created = 0, processed = 0, deleted_pending = 0, version = 'AI' } = res.data || {};
+      toast.success(`✅ ${version}: ${processed} SKUs — ${created} gợi ý mới, xoá ${deleted_pending} pending cũ.`);
       loadData();
     } catch (e) {
       toast.error('AI analysis thất bại: ' + e.message);

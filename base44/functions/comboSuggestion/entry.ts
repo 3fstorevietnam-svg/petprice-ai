@@ -1,50 +1,92 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 const DEFAULT_FEE_RATE = 0.22;
-const FIXED_COST = 15833;
+const DEFAULT_OPS_FEE = 3000;
+const DEFAULT_PACKING_FEE = 11000;
+const DEFAULT_FIXED_FEE = 1833;
+const MIN_COMPANY_MARGIN = 0.05;
+const MIN_COMBO_UNIT_DISCOUNT = 0.10;
 
-function roundComboQty(qty) {
-  if (qty <= 5) return 5;
-  if (qty <= 6) return 6;
-  if (qty <= 10) return 10;
-  if (qty <= 20) return 20;
-  return 50;
+function toNumber(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function calcComboQty(unitCost) {
-  const raw = Math.ceil(FIXED_COST / (0.3 * parseFloat(unitCost)));
-  return roundComboQty(raw);
+function roundUpCustomerFriendlyPrice(price) {
+  const safePrice = toNumber(price);
+  if (safePrice <= 0) return 0;
+  const step = safePrice >= 100000 ? 1000 : 500;
+  const ceiling = Math.ceil(safePrice / step) * step;
+  const charmPrice = ceiling - 100;
+  return charmPrice >= safePrice ? charmPrice : ceiling;
 }
 
-function calcComboMetrics({ unitCost, comboQty, comboPrice, feeRate = DEFAULT_FEE_RATE, targetMargin = 0.07 }) {
-  const cost = parseFloat(unitCost) || 0;
-  const qty = parseInt(comboQty) || calcComboQty(cost);
-  const fee = parseFloat(feeRate) || DEFAULT_FEE_RATE;
-  const comboCost = cost * qty;
+function getComboQtyCap(unitPrice) {
+  return toNumber(unitPrice) > 40000 ? 12 : 24;
+}
 
-  let price;
-  if (comboPrice) {
-    price = parseFloat(comboPrice);
-  } else {
-    // Suggested price for target margin
-    price = Math.ceil(((comboCost + FIXED_COST) / (1 - fee - parseFloat(targetMargin))) / 1000) * 1000;
+function suggestMinimumProfitablePrice(cost, feeRate, fixedCost, minMargin = MIN_COMPANY_MARGIN) {
+  const denominator = 1 - feeRate - minMargin;
+  if (denominator <= 0) return 0;
+  return roundUpCustomerFriendlyPrice((cost + fixedCost) / denominator);
+}
+
+function suggestDiscountCombo(product) {
+  const cost = toNumber(product?.cost ?? product?.unit_cost);
+  const currentPrice = toNumber(product?.current_price ?? product?.price);
+  const currentComboQty = Math.max(1, toNumber(product?.combo_qty, 1));
+  const currentUnitPrice = currentComboQty > 0 ? currentPrice / currentComboQty : currentPrice;
+  const feeRate = toNumber(product?.shopee_fee_rate ?? product?.fee_rate, DEFAULT_FEE_RATE);
+  const fixedCost =
+    toNumber(product?.ops_fee, DEFAULT_OPS_FEE) +
+    toNumber(product?.packing_fee, DEFAULT_PACKING_FEE) +
+    toNumber(product?.fixed_fee, DEFAULT_FIXED_FEE);
+  const minPrice = toNumber(product?.min_price, 0);
+  const maxPrice = product?.max_price;
+  const cap = getComboQtyCap(currentUnitPrice);
+
+  function candidateFor(qty) {
+    const rawPrice = suggestMinimumProfitablePrice(cost * qty, feeRate, fixedCost);
+    const upper = Number(maxPrice);
+    const price =
+      Number.isFinite(upper) && upper >= rawPrice
+        ? Math.min(Math.max(rawPrice, minPrice), upper)
+        : Math.max(rawPrice, minPrice);
+    const unitPrice = qty > 0 ? price / qty : price;
+    const discountRate = currentUnitPrice > 0 ? (currentUnitPrice - unitPrice) / currentUnitPrice : 0;
+    const profit = price * (1 - feeRate) - cost * qty - fixedCost;
+    const margin = price > 0 ? profit / price : 0;
+
+    return {
+      qty,
+      price,
+      unitPrice,
+      discountRate,
+      profit,
+      margin,
+      cap,
+      qualified:
+        qty <= cap &&
+        discountRate >= MIN_COMBO_UNIT_DISCOUNT &&
+        margin >= MIN_COMPANY_MARGIN &&
+        price > 0,
+    };
   }
 
-  const comboProfit = price * (1 - fee) - comboCost - FIXED_COST;
-  const comboMargin = price > 0 ? comboProfit / price : 0;
+  const candidates = [];
+  for (let qty = 2; qty <= cap; qty += 1) {
+    candidates.push(candidateFor(qty));
+  }
 
-  return {
-    unit_cost: cost,
-    combo_qty: qty,
-    combo_cost: Math.round(comboCost),
-    suggested_combo_price: Math.ceil(price / 1000) * 1000,
-    profit_per_order: Math.round(comboProfit),
-    margin: parseFloat(comboMargin.toFixed(4)),
-    margin_pct: parseFloat((comboMargin * 100).toFixed(2)),
-    fixed_cost: FIXED_COST,
-    fee_rate: fee,
-    is_profitable: comboProfit > 0,
-  };
+  const viable = candidates.filter((candidate) => candidate.qualified);
+  if (viable.length > 0) {
+    viable.sort((a, b) => a.qty - b.qty || a.price - b.price);
+    return viable[0];
+  }
+
+  return candidates
+    .slice()
+    .sort((a, b) => b.discountRate - a.discountRate || b.margin - a.margin)[0] || null;
 }
 
 Deno.serve(async (req) => {
@@ -54,27 +96,38 @@ Deno.serve(async (req) => {
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();
-    const { unit_cost, combo_qty, combo_price, fee_rate, target_margin, sku } = body;
+    const { sku } = body;
 
+    let product = body;
     if (sku) {
       const products = await base44.entities.Product.filter({ sku });
-      const product = products[0];
+      product = products[0];
       if (!product) return Response.json({ error: `SKU ${sku} not found` }, { status: 404 });
-
-      const result = calcComboMetrics({
-        unitCost: product.cost,
-        comboQty: combo_qty || null, // always recalculate unless explicitly passed
-        comboPrice: combo_price,
-        feeRate: product.shopee_fee_rate || DEFAULT_FEE_RATE,
-        targetMargin: target_margin || 0.07,
-      });
-      return Response.json({ ...result, sku: product.sku, product_name: product.name });
     }
 
-    if (!unit_cost) return Response.json({ error: 'unit_cost is required' }, { status: 400 });
+    const combo = suggestDiscountCombo(product);
+    if (!combo) {
+      return Response.json({ error: 'Không đủ dữ liệu để tính combo' }, { status: 400 });
+    }
 
-    const result = calcComboMetrics({ unitCost: unit_cost, comboQty: combo_qty, comboPrice: combo_price, feeRate: fee_rate, targetMargin: target_margin });
-    return Response.json(result);
+    return Response.json({
+      sku: product?.sku || sku || '',
+      product_name: product?.name || '',
+      suggested_combo_qty: combo.qty,
+      suggested_price: combo.price,
+      suggested_combo_price: combo.price,
+      unit_price_after_combo: combo.unitPrice,
+      discount_rate: combo.discountRate,
+      combo_qty_cap: combo.cap,
+      profit_per_order: Math.round(combo.profit),
+      margin: combo.margin,
+      margin_pct: parseFloat((combo.margin * 100).toFixed(2)),
+      is_profitable: combo.margin >= MIN_COMPANY_MARGIN,
+      qualified: combo.qualified,
+      strategy: combo.qualified
+        ? 'GOM_COMBO_GIAM_DON_GIA_TOI_THIEU_10PT'
+        : 'KHONG_DU_DIEU_KIEN_GIAM_10PT_VA_MARGIN_5PT',
+    });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }

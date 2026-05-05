@@ -12,7 +12,7 @@ const RATE_LIMIT_RETRIES = 5;
 
 const MIN_COMBO_UNIT_DISCOUNT = 0.10;
 const MIN_COMPANY_MARGIN = 0.05;
-const COMBO_VERSION_TAG = '[COMBO_V3_10PCT_CAP]';
+const COMBO_VERSION_TAG = '[COMBO_V4_10PCT_CAP_CLEAN_PENDING]';
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -326,15 +326,19 @@ Deno.serve(async (req) => {
       perfBySku[key].push(r);
     }
 
-    const existingToday = await base44.asServiceRole.entities.AISuggestion.filter(
-      { rec_date: today },
+    const oldPending = await base44.asServiceRole.entities.AISuggestion.filter(
+      { status: 'pending' },
       '-rec_date',
       ENTITY_LOAD_LIMIT
     );
 
-    const existingBySkuMap = {};
-    for (const s of existingToday) {
-      existingBySkuMap[normalizeSku(s.sku)] = s;
+    let deleted_pending = 0;
+    for (const old of oldPending || []) {
+      await withRateLimitRetry(() =>
+        base44.asServiceRole.entities.AISuggestion.delete(old.id)
+      );
+      deleted_pending += 1;
+      await sleep(50);
     }
 
     let created = 0;
@@ -366,18 +370,10 @@ Deno.serve(async (req) => {
           status: 'pending',
         };
 
-        const existing = existingBySkuMap[skuKey];
-        if (existing) {
-          await withRateLimitRetry(() =>
-            base44.asServiceRole.entities.AISuggestion.update(existing.id, payload)
-          );
-          updated += 1;
-        } else {
-          await withRateLimitRetry(() =>
-            base44.asServiceRole.entities.AISuggestion.create(payload)
-          );
-          created += 1;
-        }
+        await withRateLimitRetry(() =>
+          base44.asServiceRole.entities.AISuggestion.create(payload)
+        );
+        created += 1;
       } catch (error) {
         failed += 1;
         errors.push(`${product.sku}: ${error?.message || String(error)}`);
@@ -393,6 +389,7 @@ Deno.serve(async (req) => {
       processed: products.length,
       created,
       updated,
+      deleted_pending,
       failed,
       today,
       errors: errors.slice(0, 20),

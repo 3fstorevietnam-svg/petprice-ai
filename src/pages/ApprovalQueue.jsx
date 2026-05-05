@@ -164,9 +164,11 @@ export default function ApprovalQueue() {
   const runAI = async () => {
     setRunning(true);
     try {
-      const res = await base44.functions.invoke('generatePricingSuggestions', {});
-      const { created = 0, skipped = 0, processed = 0 } = res.data || {};
-      toast.success(`${processed} SKUs xử lý — ${created} gợi ý mới, ${skipped} đã có.`);
+      const res = await base44.functions.invoke('generatePricingSuggestions', {
+        version: 'COMBO_V4_10PCT_CAP_CLEAN_PENDING',
+      });
+      const { created = 0, processed = 0, deleted_pending = 0, version = 'AI' } = res.data || {};
+      toast.success(`${version}: ${processed} SKUs xử lý — ${created} gợi ý mới, xoá ${deleted_pending} pending cũ.`);
       load();
     } catch (e) {
       toast.error('Phân tích thất bại: ' + e.message);
