@@ -101,13 +101,33 @@ export default function Dashboard() {
     try {
       const recDate = new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
       const batchLimit = 5;
+      const cleanupLimit = 50;
+      let cleanupHasMore = true;
+      let cleanupLoops = 0;
+      let deletedPending = 0;
+
+      while (cleanupHasMore) {
+        const res = await base44.functions.invoke('generatePricingSuggestions', {
+          mode: 'cleanup_pending',
+          rec_date: recDate,
+          limit: cleanupLimit,
+        });
+        const data = res.data || {};
+        if (data.error) throw new Error(data.error);
+        deletedPending += data.deleted_pending || 0;
+        cleanupHasMore = Boolean(data.has_more);
+        cleanupLoops += 1;
+        if (cleanupLoops > 100) throw new Error('Cleanup pending exceeded 100 batches');
+      }
+
       let offset = 0;
       let hasMore = true;
       let processed = 0;
       let created = 0;
       let updated = 0;
-      let deletedPending = 0;
       let version = 'AI';
+      let batchLoops = 0;
+      const seenPageKeys = new Set();
 
       while (hasMore) {
         const res = await base44.functions.invoke('generatePricingSuggestions', {
@@ -115,10 +135,13 @@ export default function Dashboard() {
           rec_date: recDate,
           offset,
           limit: batchLimit,
-          cleanup_pending: offset === 0,
         });
         const data = res.data || {};
         if (data.error) throw new Error(data.error);
+        if (data.page_key) {
+          if (seenPageKeys.has(data.page_key)) throw new Error('Product paging returned the same page twice');
+          seenPageKeys.add(data.page_key);
+        }
 
         version = data.version || version;
         processed += data.processed || 0;
@@ -127,6 +150,8 @@ export default function Dashboard() {
         deletedPending += data.deleted_pending || 0;
         hasMore = Boolean(data.has_more);
         offset = data.next_offset || offset + batchLimit;
+        batchLoops += 1;
+        if (batchLoops > 300) throw new Error('AI generation exceeded 300 batches');
       }
 
       toast.success(`${version}: ${processed} SKUs — ${created} mới, ${updated} cập nhật, xoá ${deletedPending} pending cũ.`);

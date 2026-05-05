@@ -132,15 +132,35 @@ export default function AISuggestions() {
   const generateSuggestions = async () => {
     setGenerating(true);
     try {
-      const recDate = format(new Date(), 'yyyy-MM-dd');
+      const recDate = new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
       const batchLimit = 5;
+      const cleanupLimit = 50;
+      let cleanupHasMore = true;
+      let cleanupLoops = 0;
+      let deletedPending = 0;
+
+      while (cleanupHasMore) {
+        const res = await base44.functions.invoke('generatePricingSuggestions', {
+          mode: 'cleanup_pending',
+          rec_date: recDate,
+          limit: cleanupLimit,
+        });
+        const data = res.data || {};
+        if (data.error) throw new Error(data.error);
+        deletedPending += data.deleted_pending || 0;
+        cleanupHasMore = Boolean(data.has_more);
+        cleanupLoops += 1;
+        if (cleanupLoops > 100) throw new Error('Cleanup pending exceeded 100 batches');
+      }
+
       let offset = 0;
       let hasMore = true;
       let processed = 0;
       let created = 0;
       let updated = 0;
-      let deletedPending = 0;
       let version = 'AI';
+      let batchLoops = 0;
+      const seenPageKeys = new Set();
 
       while (hasMore) {
         const res = await base44.functions.invoke('generatePricingSuggestions', {
@@ -148,10 +168,13 @@ export default function AISuggestions() {
           rec_date: recDate,
           offset,
           limit: batchLimit,
-          cleanup_pending: offset === 0,
         });
         const data = res.data || {};
         if (data.error) throw new Error(data.error);
+        if (data.page_key) {
+          if (seenPageKeys.has(data.page_key)) throw new Error('Product paging returned the same page twice');
+          seenPageKeys.add(data.page_key);
+        }
 
         version = data.version || version;
         processed += data.processed || 0;
@@ -160,6 +183,8 @@ export default function AISuggestions() {
         deletedPending += data.deleted_pending || 0;
         hasMore = Boolean(data.has_more);
         offset = data.next_offset || offset + batchLimit;
+        batchLoops += 1;
+        if (batchLoops > 300) throw new Error('AI generation exceeded 300 batches');
       }
 
       toast.success(`${version}: processed ${processed}, created ${created}, updated ${updated}, deleted old pending ${deletedPending}`);
@@ -171,16 +196,15 @@ export default function AISuggestions() {
     }
   };
 
-  // Only count/show pending from the latest rec_date batch
+  // Keep all pending rows visible after cleanup + regenerate.
   const latestRecDate = suggestions.reduce((best, s) => (!best || s.rec_date > best ? s.rec_date : best), null);
-  const latestPendingSuggestions = suggestions.filter(s => s.status === 'pending' && s.rec_date === latestRecDate);
+  const pendingSuggestions = suggestions.filter(s => s.status === 'pending');
 
   const filtered = suggestions.filter(s => {
     const matchSku = !skuSearch || s.sku?.toLowerCase().includes(skuSearch.toLowerCase());
     if (!matchSku) return false;
-    // "pending" tab only shows latest batch pending
-    if (activeFilter === 'pending') return s.status === 'pending' && s.rec_date === latestRecDate;
-    if (activeFilter === 'all') return s.status === 'pending' && s.rec_date === latestRecDate;
+    if (activeFilter === 'pending') return s.status === 'pending';
+    if (activeFilter === 'all') return s.status === 'pending';
     if (activeFilter === 'losing') return (s.current_profit !== undefined && s.current_profit !== null && s.current_profit < 0) || (s.current_margin !== undefined && s.current_margin !== null && s.current_margin < 0);
     if (activeFilter === 'NGUNG_ADS') return s.ads_action === 'NGUNG_ADS';
     if (activeFilter === 'CHAY_ADS') return s.ads_action === 'CHAY_ADS';
@@ -189,7 +213,7 @@ export default function AISuggestions() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <PageHeader title="AI Pricing Suggestions" subtitle={`${latestPendingSuggestions.length} pending approval${latestRecDate ? ` (${latestRecDate})` : ''}`}
+      <PageHeader title="AI Pricing Suggestions" subtitle={`${pendingSuggestions.length} pending approval${latestRecDate ? ` (latest ${latestRecDate})` : ''}`}
         actions={
           <div className="flex items-center gap-2">
             <Button size="sm" variant="outline" onClick={openCreate}><Plus className="w-4 h-4 mr-1.5" />Manual</Button>

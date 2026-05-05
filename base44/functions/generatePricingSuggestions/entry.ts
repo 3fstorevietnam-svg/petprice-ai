@@ -49,6 +49,54 @@ async function findPendingSuggestionForSku(base44, sku) {
   return { latest, duplicates };
 }
 
+async function loadActiveProductPage(base44, limit, offset) {
+  try {
+    const page = await withRateLimitRetry(() =>
+      base44.asServiceRole.entities.Product.list('-updated_date', limit, offset)
+    );
+    return Array.isArray(page) ? page.filter(product => product.status === 'active') : [];
+  } catch (error) {
+    const page = await withRateLimitRetry(() =>
+      base44.asServiceRole.entities.Product.filter(
+        { status: 'active' },
+        '-updated_date',
+        limit,
+        offset
+      )
+    );
+    return Array.isArray(page) ? page : [];
+  }
+}
+
+async function cleanupPendingSuggestions(base44, limit) {
+  const rows = await withRateLimitRetry(() =>
+    base44.asServiceRole.entities.AISuggestion.filter(
+      { status: 'pending' },
+      '-rec_date',
+      limit
+    )
+  );
+  let deleted = 0;
+  const errors = [];
+
+  for (const row of rows || []) {
+    try {
+      await withRateLimitRetry(() =>
+        base44.asServiceRole.entities.AISuggestion.delete(row.id)
+      );
+      deleted += 1;
+    } catch (error) {
+      errors.push(`${row.sku || row.id}: ${error?.message || String(error)}`);
+    }
+  }
+
+  return {
+    deleted,
+    errors,
+    hasMore: Array.isArray(rows) && rows.length === limit,
+  };
+}
+
 function normalizeSku(sku) {
   return String(sku || '').trim().toUpperCase();
 }
@@ -312,14 +360,29 @@ Deno.serve(async (req) => {
     const offset = Math.max(0, toNumber(body?.offset, 0));
     const limit = Math.max(1, Math.min(10, toNumber(body?.limit, DEFAULT_BATCH_LIMIT)));
 
-    const productsRaw = await base44.asServiceRole.entities.Product.filter(
-      { status: 'active' },
-      '-updated_date',
-      limit,
-      offset
-    );
+    if (body?.mode === 'cleanup_pending') {
+      const cleanupLimit = Math.max(1, Math.min(50, toNumber(body?.limit, 50)));
+      const cleanup = await cleanupPendingSuggestions(base44, cleanupLimit);
 
+      return Response.json({
+        success: true,
+        version: COMBO_VERSION_TAG,
+        mode: 'cleanup_pending',
+        processed: 0,
+        created: 0,
+        updated: 0,
+        deleted_pending: cleanup.deleted,
+        failed: cleanup.errors.length,
+        has_more: cleanup.hasMore,
+        limit: cleanupLimit,
+        today,
+        errors: cleanup.errors.slice(0, 20),
+      });
+    }
+
+    const productsRaw = await loadActiveProductPage(base44, limit, offset);
     const products = uniqueProductsBySku(productsRaw);
+    const pageKey = productsRaw.map(product => product.id || product.sku).join('|');
 
     if (!Array.isArray(productsRaw) || productsRaw.length === 0) {
       return Response.json({
@@ -334,6 +397,7 @@ Deno.serve(async (req) => {
         next_offset: offset,
         has_more: false,
         limit,
+        page_key: '',
         today,
       });
     }
@@ -404,6 +468,7 @@ Deno.serve(async (req) => {
       next_offset: nextOffset,
       has_more: productsRaw.length === limit,
       limit,
+      page_key: pageKey,
       created,
       updated,
       deleted_pending,
